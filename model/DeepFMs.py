@@ -455,7 +455,7 @@ class DeepFMs(torch.nn.Module):
         num_dnn = 0
         print('========')
         for name, param in model.named_parameters():
-            print name, param.data.shape
+            print(name, param.data.shape)
             num_total += np.prod(param.data.shape)
             if '1st_embeddings' in name:
                 num_1st_order_embeddings += np.prod(param.data.shape)
@@ -558,6 +558,7 @@ class DeepFMs(torch.nn.Module):
         num_1st_order_embeddings = 0
         num_2nd_order_embeddings = 0
         num_dnn = 0
+        non_zero_r = 0
         print('========')
         for name, param in model.named_parameters():
             num_total += (param != 0).sum().item()

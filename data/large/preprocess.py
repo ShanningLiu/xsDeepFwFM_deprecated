@@ -61,7 +61,7 @@ def cnt_freq_train(inputs):
     for idx, line in enumerate(open(inputs)):
         line = line.replace('\n', '').split('\t')
         if idx % 1000000 == 0 and idx > 0:
-            print idx
+            print(idx)
         for i in range(1, 40):
             if i < 14:
                 #line[i] = project_numeric(line[i])
@@ -80,7 +80,7 @@ def generate_feature_map_and_train_csv(inputs, train_csv, file_feature_map, freq
     for idx, line in enumerate(open(inputs)):
         line = line.replace('\n', '').split('\t')
         if idx % 1000000 == 0 and idx > 0:
-            print idx
+            print(idx)
         output_line = [line[0]]
         for i in range(1, 40):
             # map numerical features
@@ -161,9 +161,9 @@ def get_feature_size(fname):
                 mins[i] = min(mins[i], float(line[i]))
                 maxs[i] = max(maxs[i], float(line[i]))
             except:
-                print line
-    print cnts
-    print mins
-    print maxs
+                print(line)
+    print(cnts)
+    print(mins)
+    print(maxs)
 
 #get_feature_size('train_shuffle.csv')

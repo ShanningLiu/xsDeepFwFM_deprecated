@@ -172,7 +172,7 @@ class NFM(torch.nn.Module):
 
         print("Init deep part succeed")
 
-        print "Init succeed"
+        print("Init succeed")
 
     def forward(self, Xi, Xv):
         """
@@ -339,7 +339,7 @@ class NFM(torch.nn.Module):
         num_total = 0
         print('========')
         for name, param in model.named_parameters():
-            print name, param.data.shape
+            print(name, param.data.shape)
             num_total += np.prod(param.data.shape)
         print("Number of total parameters: %d"% (num_total))
 
@@ -545,15 +545,15 @@ class NFM(torch.nn.Module):
 
     def print_embedding_prod(self,Xi,Xv):
         if not self.use_fm:
-            print "Error! Only print fm model!"
+            print("Error! Only print fm model!")
             return
         fm_second_order_emb_arr = [(torch.sum(emb(Xi[:, i, :]), 1).t() * Xv[:, i]).t() for i, emb in
                                    enumerate(self.fm_second_order_embeddings)]
         total_prod = fm_second_order_emb_arr[0] + 1.0
         for emb in fm_second_order_emb_arr[1:]:
             total_prod = total_prod * (emb + 1.0)
-        print "max:", torch.max(total_prod)
-        print "min", torch.min(total_prod)
+        print("max:", torch.max(total_prod))
+        print("min", torch.min(total_prod))
 
 """
     test part
