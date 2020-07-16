@@ -19,10 +19,10 @@ In the training dataset
 
 Step 1, randomly split the training data into training and valid dataset
 
-Step 1, cnt_freq_train: count the frequency of features in each field; 
+Step 2, cnt_freq_train: count the frequency of features in each field;
         ignore data that has less than 40 columns (it consists of 47% of the whole dataset)
 
-Step 2, ignore_long_tail: set the long-tail features with frequency less than a threshold as 0; \
+Step 3, ignore_long_tail: set the long-tail features with frequency less than a threshold as 0; \
         generate the feature-map index, the columns are: field index, unique feature, mapped index
 
 In the valid dataset
@@ -111,6 +111,28 @@ def generate_feature_map_and_train_csv(inputs, train_csv, file_feature_map, freq
             #    only_one_zero_index = False
     return feature_map
 
+def get_feature_size(fname):
+    cnts = [0] * 40
+    mins = [1] * 40
+    maxs = [1] * 40
+    dicts = []
+    for i in range(40):
+        dicts.append(set())
+    for line in open(fname):
+        line = line.strip().split(',')
+        for i in range(40):
+            if line[i] not in dicts[i]:
+                cnts[i] += 1
+                dicts[i].add(line[i])
+            try:
+                mins[i] = min(mins[i], float(line[i]))
+                maxs[i] = max(maxs[i], float(line[i]))
+            except:
+                print(line)
+    print(cnts)
+    print(mins)
+    print(maxs)
+
 def generate_valid_csv(inputs, valid_csv, feature_map):
     fout = open(valid_csv, 'w')
     for idx, line in enumerate(open(inputs)):
@@ -143,27 +165,5 @@ print('Impute the valid dataset.')
 generate_valid_csv('valid.txt', 'valid.csv', feature_map)
 print('Delete unnecessary files')
 os.system('rm train1.txt valid.txt')
-
-def get_feature_size(fname):
-    cnts = [0] * 40
-    mins = [1] * 40
-    maxs = [1] * 40
-    dicts = []
-    for i in range(40):
-        dicts.append(set())
-    for line in open(fname):
-        line = line.strip().split(',')
-        for i in range(40):
-            if line[i] not in dicts[i]:
-                cnts[i] += 1
-                dicts[i].add(line[i])
-            try:
-                mins[i] = min(mins[i], float(line[i]))
-                maxs[i] = max(maxs[i], float(line[i]))
-            except:
-                print(line)
-    print(cnts)
-    print(mins)
-    print(maxs)
 
 #get_feature_size('train_shuffle.csv')
