@@ -18,7 +18,7 @@ Reference:
 import os, sys, random
 import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_auc_score, precision_recall_curve, auc, log_loss
 from time import time
 
 import torch
@@ -557,24 +557,25 @@ class DeepFMs(torch.nn.Module):
             for name, param in model.named_parameters():
                 no_non_sparse += (param != 0).sum().item()
             print('Model parameters %d, sparse rate %.2f%%' % (no_non_sparse, 100 - no_non_sparse * 100. / num_total))
-            train_loss, train_eval = self.eval_by_batch(Xi_train, Xv_train, y_train, x_size)
+            train_loss, train_eval, train_prauc, train_rce = self.eval_by_batch(Xi_train, Xv_train, y_train, x_size)
             train_result.append(train_eval)
-            print('Training [%d] loss: %.6f metric: %.6f sparse %.2f%% time: %.1f s' %
+            print('Training [%d] loss: %.6f metric: %.6f prauc: %.4f rce: %.2f sparse %.2f%% time: %.1f s' %
                   (
-                  epoch + 1, train_loss, train_eval, 100 - no_non_sparse * 100. / num_total, time() - epoch_begin_time))
+                  epoch + 1, train_loss, train_eval, train_prauc, train_rce, 100 - no_non_sparse * 100. / num_total, time() - epoch_begin_time))
             if is_valid:
-                valid_loss, valid_eval = self.eval_by_batch(Xi_valid, Xv_valid, y_valid, x_valid_size)
+                valid_loss, valid_eval, vaild_prauc, valid_rce = self.eval_by_batch(Xi_valid, Xv_valid, y_valid, x_valid_size)
                 valid_result.append(valid_eval)
-                print('Validation [%d] loss: %.6f metric: %.6f sparse %.2f%% time: %.1f s' %
-                      (epoch + 1, valid_loss, valid_eval, 100 - no_non_sparse * 100. / num_total,
+                print('Validation [%d] loss: %.6f metric: %.6f prauc: %.4f rce: %.2f sparse %.2f%% time: %.1f s' %
+                      (epoch + 1, valid_loss, valid_eval, vaild_prauc, valid_rce, 100 - no_non_sparse * 100. / num_total,
                        time() - epoch_begin_time))
             print('*' * 50)
 
+            # shuffle training dataset
             permute_idx = np.random.permutation(x_size)
             Xi_train = Xi_train[permute_idx]
             Xv_train = Xv_train[permute_idx]
             y_train = y_train[permute_idx]
-            print('Training dataset shuffled.')
+            #print('Training dataset shuffled.')
 
             if save_path:
                 torch.save(self.state_dict(), save_path)
@@ -668,11 +669,34 @@ class DeepFMs(torch.nn.Module):
                 batch_xi, batch_xv, batch_y = batch_xi.cuda(), batch_xv.cuda(), batch_y.cuda()
             outputs = model(batch_xi, batch_xv)
             pred = torch.sigmoid(outputs).cpu()
-            y_pred.extend(pred.data.numpy())
+            y_pred.extend(pred.data.numpy().astype("float64"))
             loss = criterion(outputs, batch_y)
             total_loss += loss.data.item() * (end - offset)
         total_metric = self.eval_metric(y, y_pred)
-        return total_loss / x_size, total_metric
+        prauc = self.compute_prauc(y_pred, y)
+        rce = self.compute_rce(y_pred, y)
+        return total_loss / x_size, total_metric, prauc, rce
+
+    def compute_prauc(self, pred, gt):
+        prec, recall, thresh = precision_recall_curve(gt, pred)
+        prauc = auc(recall, prec)
+        return prauc
+
+    def calculate_ctr(self, gt):
+        positive = len([x for x in gt if x == 1])
+        ctr = positive / float(len(gt))
+        return ctr
+
+    def compute_rce(self, pred, gt):
+        cross_entropy = log_loss(gt, pred)
+        data_ctr = self.calculate_ctr(gt)
+        strawman_cross_entropy = log_loss(gt, [data_ctr for _ in range(len(gt))])
+        return (1.0 - cross_entropy / strawman_cross_entropy) * 100.0
+
+    def cross_entropy(self, predictions, targets):
+        N = predictions.shape[0]
+        ce = -np.sum(targets * np.log(predictions)) / N
+        return ce
 
     def binary_search_threshold(self, param, target_percent, total_no):
         l, r = 0., 1e2
