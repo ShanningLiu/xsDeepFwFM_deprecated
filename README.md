@@ -1,4 +1,4 @@
-# Sparse DeepFwFM
+# Extreme Sparse DeepFwFM
 
 Deploying the end-to-end deep factorization machines has a critical issue in prediction latency. To handle this issue, we study the acceleration of the prediction by conducting structural pruning for DeepFwFM, which ends up with 46X speed-ups without sacrifice of the state-of-the-art performance on Criteo dataset.
 
@@ -6,10 +6,11 @@ Deploying the end-to-end deep factorization machines has a critical issue in pre
 
 Please refer to the [arXiv paper](https://arxiv.org/pdf/2002.06987.pdf) if you are interested. 
 
+In this repository additional model compression and acceleration will be contucted. All on the Twitter dataset given by the RecSys 2020 Challenge.
 
 ## Environment
 
-1. Python2.7
+1. Python 3
 
 2. PyTorch
 
@@ -56,7 +57,7 @@ xDeepFM: extreme factorization machine
 You may try the link here https://github.com/Leavingseason/xDeepFM
 
 
-## How to conduct strctural pruning
+## How to conduct structural pruning
 
 
 The default code gives 0.8123 AUC if apply 90% sparsity on the DNN component and the field matrix R and apply 40% (90%x0.444) on the embeddings.
@@ -65,9 +66,35 @@ The default code gives 0.8123 AUC if apply 90% sparsity on the DNN component and
 python main_all.py -l2 6e-7 -n_epochs 10 -warm 2 -prune 1 -sparse 0.90  -prune_deep 1 -prune_fm 1 -prune_r 1 -use_fwlw 1 -emb_r 0.444 -emb_corr 1. > ./logs/deepfwfm_l2_6e_7_prune_all_and_r_warm_2_sparse_0.90_emb_r_0.444_emb_corr_1
 ```
 
+## Preprocess full Twitter dataset
+
+To download the full dataset, you can use the link below
+https://recsys-twitter.com/
+
+Move the file to the *./data/large* folder
+
+Move to the data folder and process the raw data.
+```bash
+$ python preprocess_twitter.py
+```
+
+When the dataset is ready, you need to change the files in main_all.py as follows
+```py
+twitter_num_feat_dim = set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
+
+train_dict = data_preprocess.read_data('./data/large/train_twitter.csv', './data/large/twitter_feature_map',
+                                       twitter_num_feat_dim, feature_dim_start=1, dim=20)
+test_dict = data_preprocess.read_data('./data/large/valid_twitter.csv', './data/large/twitter_feature_map',
+                                      twitter_num_feat_dim, feature_dim_start=1, dim=20)
+```
+
+Then run with following parameter:
+```bash
+$ python main_all.py -... -numerical=15
+```
 
 
-## Preprocess full dataset
+## Preprocess full Criteo dataset
 
 The Criteo dataset has 2-class labels with 22 categorical features and 11 numerical features.
 
@@ -79,7 +106,7 @@ Unzip the raw data and save it in ./data/large folder:
 
 Move to the data folder and process the raw data.
 ```bash
-$ python preprocess.py
+$ python preprocess_criteo.py
 ```
 
 When the dataset is ready, you need to change the files in main_all.py as follows
