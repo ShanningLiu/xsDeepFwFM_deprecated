@@ -12,7 +12,7 @@ Unzip the raw data:
 
 Criteo data has 13 numerical fields and 26 category fields. 
 
-train.txt: The 1st column is label, and the rest are features.
+tiny_train_criteo.txt: The 1st column is label, and the rest are features.
 test.txt: All the column are features. We don't use it.
 
 In the training dataset
@@ -50,16 +50,16 @@ def scale(x):
     if x == '':
         return '0'
     elif float(x) > 2:
-        return str(int(math.log(float(x))**2))
+        return str(int(math.log(float(x))**2))  # log transformation to normalize numerical features
     else:
-        return x
+        return str(int(float(x)))
 
 def cnt_freq_train(inputs):
     count_freq = []
     for i in range(40):
         count_freq.append({})
     for idx, line in enumerate(open(inputs)):
-        line = line.replace('\n', '').split('\t')
+        line = line.replace('\n', '').split(',')
         if idx % 1000000 == 0 and idx > 0:
             print(idx)
         for i in range(1, 40):
@@ -78,7 +78,7 @@ def generate_feature_map_and_train_csv(inputs, train_csv, file_feature_map, freq
         feature_map.append({})
     fout = open(train_csv, 'w')
     for idx, line in enumerate(open(inputs)):
-        line = line.replace('\n', '').split('\t')
+        line = line.replace('\n', '').split(',')
         if idx % 1000000 == 0 and idx > 0:
             print(idx)
         output_line = [line[0]]
@@ -136,7 +136,7 @@ def get_feature_size(fname):
 def generate_valid_csv(inputs, valid_csv, feature_map):
     fout = open(valid_csv, 'w')
     for idx, line in enumerate(open(inputs)):
-        line = line.replace('\n', '').split('\t')
+        line = line.replace('\n', '').split(',')
         output_line = [line[0]]
         for i in range(1, 40):
             if i < 14:
@@ -151,19 +151,20 @@ def generate_valid_csv(inputs, valid_csv, feature_map):
         fout.write(output_line + '\n')
 
 print('Split the orignal dataset into train and valid dataset.')
-random_split('train.txt', 'train1.txt', 'valid.txt')
+random_split('tiny_train_criteo.txt', 'train1.txt', 'valid.txt')
 #print('Count the frequency.')
 #freq_dict = cnt_freq_train('train1.txt')
 
 # Not the best way, follow xdeepfm
-freq_dict = cnt_freq_train('train.txt')
+freq_dict = cnt_freq_train('tiny_train_criteo.txt')
 
 
 print('Generate the feature map and impute the training dataset.')
-feature_map = generate_feature_map_and_train_csv('train1.txt', 'train.csv', 'criteo_feature_map', freq_dict, threshold=8)
+feature_map = generate_feature_map_and_train_csv('train1.txt', 'train_criteo.csv', 'criteo_feature_map', freq_dict, threshold=8)
 print('Impute the valid dataset.')
-generate_valid_csv('valid.txt', 'valid.csv', feature_map)
+generate_valid_csv('valid.txt', 'valid_criteo.csv', feature_map)
 print('Delete unnecessary files')
-os.system('rm train1.txt valid.txt')
+os.remove('valid.txt')
+os.remove('train1.txt')
 
 #get_feature_size('train_shuffle.csv')
