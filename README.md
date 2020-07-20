@@ -86,6 +86,8 @@ train_dict = data_preprocess.read_data('./data/large/train_twitter.csv', './data
                                        twitter_num_feat_dim, feature_dim_start=1, dim=20)
 test_dict = data_preprocess.read_data('./data/large/valid_twitter.csv', './data/large/twitter_feature_map',
                                       twitter_num_feat_dim, feature_dim_start=1, dim=20)
+
+model = DeepFMs.DeepFMs(field_size=20,...)
 ```
 
 Then run with following parameter:
