@@ -494,6 +494,7 @@ class DeepFMs(torch.nn.Module):
         print('Number of 2nd order embeddings: %d' % (num_2nd_order_embeddings))
         print('Number of DNN parameters: %d' % (num_dnn))
         print("Number of total parameters: %d" % (num_total))
+        print('========')
         n_iter = 0
         for epoch in range(self.n_epochs):
             total_loss = 0.0

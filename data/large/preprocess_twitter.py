@@ -120,7 +120,7 @@ def add_binary_labels(data, className):
 data = []
 for chunk in pd.read_csv("C:\\Users\\AndreasPeintner\\Downloads\\training.tsv", sep='\x01', encoding='utf8',
                          names=names,
-                         chunksize=100 * 10 ** 3, converters={'hashtags': lambda x: x.split('\t'),
+                         chunksize=1000 * 10 ** 3, converters={'hashtags': lambda x: x.split('\t'),
                                                              'present_media': lambda x: x.split('\t'),
                                                              'present_links': lambda x: x.split('\t'),
                                                              'present_domains': lambda x: x.split('\t')}):
@@ -147,9 +147,10 @@ data = data[['label'] + dense_features + sparse_features]
 print('Split the original dataset into train and valid dataset.')
 data_train, data_valid = train_test_split(data, test_size=0.2)
 
-print(data_train)
+#print(data_train)
 
 # Not the best way, follow xdeepfm
+print("count freq in train")
 freq_dict = cnt_freq_train(data)
 
 print('Generate the feature map and impute the training dataset.')

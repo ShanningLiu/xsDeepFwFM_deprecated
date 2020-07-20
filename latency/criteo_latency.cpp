@@ -20,7 +20,7 @@
 
 // Credit to: https://github.com/uestla/Sparse-Matrix
 //#include "<libs_dir>/src/SparseMatrix/SparseMatrix.cpp"
-#include "/home/deng106/work/Sparse_DeepFwFM/latency/src/SparseMatrix/SparseMatrix.cpp"
+#include "./src/SparseMatrix/SparseMatrix.cpp"
 
 using namespace std;
 
@@ -34,7 +34,7 @@ const int NODES = 400;
 const int LAYERS = 3;
 
 /* feature dimension in different fields
- * the first 13 fileds are numerical features of dimension 1 */
+ * the first 13 fieds are numerical features of dimension 1 */
 vector<int> dim{1,1,1,1,1,1,1,1,1,1,1,1,1, 1458, 556, 245197, 166166, 306, 20, 12055, 634, 4, 46330, 5229, 243454, 3177, 27, \
             11745, 225322, 11, 4727, 2058, 5, 238640, 18, 16, 67856, 89, 50942};
 

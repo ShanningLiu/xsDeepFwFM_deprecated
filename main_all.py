@@ -68,7 +68,7 @@ test_dict = data_preprocess.read_data('./data/large/valid_twitter.csv', './data/
 
 model = DeepFMs.DeepFMs(field_size=20, feature_sizes=train_dict['feature_sizes'],
                         embedding_size=pars.embedding_size, n_epochs=pars.n_epochs,
-                        verbose=True, use_cuda=pars.use_cuda, use_fm=pars.use_fm, use_fwfm=pars.use_fwfm,
+                        verbose=False, use_cuda=pars.use_cuda, use_fm=pars.use_fm, use_fwfm=pars.use_fwfm,
                         use_ffm=pars.use_ffm, use_deep=pars.use_deep,
                         batch_size=pars.batch_size, learning_rate=pars.learning_rate, weight_decay=pars.l2,
                         momentum=pars.momentum, sparse=pars.sparse, warm=pars.warm,
