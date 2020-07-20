@@ -480,7 +480,8 @@ class DeepFMs(torch.nn.Module):
         num_dnn = 0
         print('========')
         for name, param in model.named_parameters():
-            print(name, param.data.shape)
+            if self.verbose:
+                print(name, param.data.shape)
             num_total += np.prod(param.data.shape)
             if '1st_embeddings' in name:
                 num_1st_order_embeddings += np.prod(param.data.shape)
@@ -575,7 +576,8 @@ class DeepFMs(torch.nn.Module):
             Xi_train = Xi_train[permute_idx]
             Xv_train = Xv_train[permute_idx]
             y_train = y_train[permute_idx]
-            #print('Training dataset shuffled.')
+            if self.verbose:
+                print('Training dataset shuffled.')
 
             if save_path:
                 torch.save(self.state_dict(), save_path)
