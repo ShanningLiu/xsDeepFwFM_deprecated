@@ -36,21 +36,15 @@ def scale(x):
     else:
         return str(int(float(x)))
 
-
 def cnt_freq_train(inputs):
     count_freq = []
-    for i in range(len(list(inputs.columns))):
-        count_freq.append({})
-    for idx, line in inputs.iterrows():
-        if idx % 1000000 == 0 and idx > 0:
-            print(idx)
-        for i in range(1, len(list(inputs.columns))):
-            if i < len(dense_features) + 1:
-                # line[i] = project_numeric(line[i])
-                line[i] = scale(line[i])
-            if line[i] not in count_freq[i]:
-                count_freq[i][line[i]] = 0
-            count_freq[i][line[i]] += 1
+
+    for dense_feature in dense_features:
+        inputs[dense_feature] = inputs.apply(lambda x: scale(x[dense_feature]), axis=1)
+
+    for col in inputs.columns:
+        count_freq.append(inputs[col].value_counts().to_dict())
+
     return count_freq
 
 
@@ -120,7 +114,7 @@ def add_binary_labels(data, className):
 data = []
 for chunk in pd.read_csv("C:\\Users\\AndreasPeintner\\Downloads\\training.tsv", sep='\x01', encoding='utf8',
                          names=names,
-                         chunksize=1000 * 10 ** 3, converters={'hashtags': lambda x: x.split('\t'),
+                         chunksize=100 * 10 ** 3, converters={'hashtags': lambda x: x.split('\t'),
                                                              'present_media': lambda x: x.split('\t'),
                                                              'present_links': lambda x: x.split('\t'),
                                                              'present_domains': lambda x: x.split('\t')}):
@@ -150,7 +144,7 @@ data_train, data_valid = train_test_split(data, test_size=0.2)
 #print(data_train)
 
 # Not the best way, follow xdeepfm
-print("count freq in train")
+print("Count freq in train")
 freq_dict = cnt_freq_train(data)
 
 print('Generate the feature map and impute the training dataset.')
