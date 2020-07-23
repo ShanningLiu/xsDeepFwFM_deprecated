@@ -151,7 +151,7 @@ def generate_valid_csv(inputs, valid_csv, feature_map):
         fout.write(output_line + '\n')
 
 print('Split the orignal dataset into train and valid dataset.')
-random_split('tiny_train_criteo.txt', 'train1.txt', 'valid.txt')
+random_split('train_criteo.txt', 'train1.txt', 'valid.txt')
 #print('Count the frequency.')
 #freq_dict = cnt_freq_train('train1.txt')
 

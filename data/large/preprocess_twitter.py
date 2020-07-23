@@ -1,12 +1,13 @@
 import random, math, os
+import dask
+import dask.dataframe as dd
+import dask.array as da
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import MinMaxScaler
+from dask_ml.model_selection import train_test_split
+from dask_ml.preprocessing import MinMaxScaler
 
 random.seed(0)
-
-pd.set_option('display.max_columns', 50)
 
 names = ['text_tokens', 'hashtags', 'tweet_id', 'present_media', 'present_links', 'present_domains', 'tweet_type',
          'language', 'timestamp',
@@ -32,123 +33,104 @@ def scale(x):
     if x == '':
         return '0'
     elif float(x) > 2:
-        return str(int(math.log(float(x)) ** 2))  # log transformation to normalize numerical features
+        return int(math.log(float(x)) ** 2) # log transformation to normalize numerical features
     else:
-        return str(int(float(x)))
+        return int(float(x))
+
 
 def cnt_freq_train(inputs):
     count_freq = []
 
     for dense_feature in dense_features:
-        inputs[dense_feature] = inputs.apply(lambda x: scale(x[dense_feature]), axis=1)
+        inputs[dense_feature] = inputs.apply(lambda x: scale(x[dense_feature]), axis=1, meta=(dense_feature, 'int64'))  # needed?
 
     for col in inputs.columns:
-        count_freq.append(inputs[col].value_counts().to_dict())
+        count_freq.append(inputs[col].value_counts().compute())
 
     return count_freq
 
 
 def generate_feature_map_and_train_csv(inputs, train_csv, file_feature_map, freq_dict, threshold=8):
     feature_map = []
-    for i in range(len(list(inputs.columns))):
-        feature_map.append({})
-    fout = open(train_csv, 'w')
-    for idx, line in inputs.iterrows():
-        if idx % 1000000 == 0 and idx > 0:
-            print(idx)
-        output_line = [str(line['label'])]
-        for i in range(1, len(list(inputs.columns))):
-            # map numerical features
-            if i < len(dense_features) + 1:
-                # line[i] = project_numeric(line[i])
-                line[i] = scale(line[i])
-                output_line.append(line[i])
-            # handle categorical features
-            elif freq_dict[i][line[i]] < threshold:
-                output_line.append('0')
-            elif line[i] in feature_map[i]:
-                output_line.append(feature_map[i][line[i]])
+    for freq in freq_dict:
+        col_map = {}
+        for idx, (key, value) in enumerate(freq.items()):
+            if value >= threshold:
+                col_map[key] = idx + 1
             else:
-                output_line.append(str(len(feature_map[i]) + 1))
-                feature_map[i][str(line[i])] = str(len(feature_map[i]) + 1)
-        output_line = ','.join(output_line)
-        fout.write(output_line + '\n')
+                col_map[key] = 0
+
+        feature_map.append(col_map)
+
+    #for dense_feature in dense_features:
+    #    inputs[dense_feature] = inputs.apply(lambda x: scale(x[dense_feature]), axis=1, meta=(dense_feature, 'int64'))
+    mms = MinMaxScaler(feature_range=(0, 1))
+    inputs[dense_features] = mms.fit_transform(inputs[dense_features])
+
+    for i, col_map in enumerate(feature_map[len(dense_features) + 1:]):
+        inputs[inputs.columns[i + len(dense_features) + 1]] = inputs[inputs.columns[i + len(dense_features) + 1]].map(
+            col_map)
+    inputs.compute().to_csv(train_csv, sep=',', encoding='utf-8', index=False, header=False)
 
     # write feature_map file
     f_map = open(file_feature_map, 'w')
-    for i in range(1, len(list(inputs.columns))):
-        # only_one_zero_index = True
+    for i in range(len(dense_features) + 1, len(list(inputs.columns))):
         for feature in feature_map[i]:
-            # if feature_map[i][feature] == '0' and only_one_zero_index == False:
-            #    continue
-            f_map.write(str(i) + ',' + feature + ',' + feature_map[i][feature] + '\n')
-            # if only_one_zero_index == True and feature_map[i][feature] == '0':
-            #    only_one_zero_index = False
+            if feature_map[i][feature] != 0:
+                f_map.write(str(i) + ',' + feature + ',' + str(feature_map[i][feature]) + '\n')
     return feature_map
 
 
 def generate_valid_csv(inputs, valid_csv, feature_map):
-    fout = open(valid_csv, 'w')
-    for idx, line in inputs.iterrows():
-        output_line = [str(line['label'])]
-        for i in range(1, len(list(inputs.columns))):
-            if i < len(dense_features) + 1:
-                # line[i] = project_numeric(line[i])
-                line[i] = scale(line[i])
-                output_line.append(line[i])
-            elif line[i] in feature_map[i]:
-                output_line.append(feature_map[i][line[i]])
-            else:
-                output_line.append('0')
-        output_line = ','.join(output_line)
-        fout.write(output_line + '\n')
+    for dense_feature in dense_features:
+        inputs[dense_feature] = inputs.apply(lambda x: scale(x[dense_feature]), axis=1, meta=(dense_feature, 'int64'))
+
+    for i, col_map in enumerate(feature_map[len(dense_features) + 1:]):
+        inputs[inputs.columns[i + len(dense_features) + 1]] = inputs[inputs.columns[i + len(dense_features) + 1]].map(
+            col_map)
+
+    inputs.compute().to_csv(valid_csv, sep=',', encoding='utf-8', index=False, header=False)
 
 
-def add_binary_labels(data, className):
-    data['label'] = 0
-    data = data.assign(label=np.where(np.isnan(data[className]), data['label'], 1))
-
+def add_binary_labels(df, className):
+    df['label'] = da.isfinite(df[className]).astype(int)
     return data
 
 
-data = []
-for chunk in pd.read_csv("C:\\Users\\AndreasPeintner\\Downloads\\training.tsv", sep='\x01', encoding='utf8',
-                         names=names,
-                         chunksize=100 * 10 ** 3, converters={'hashtags': lambda x: x.split('\t'),
-                                                             'present_media': lambda x: x.split('\t'),
-                                                             'present_links': lambda x: x.split('\t'),
-                                                             'present_domains': lambda x: x.split('\t')}):
-    data = chunk
-    break
+data = dd.read_csv("G:\\training_s.tsv", sep='\x01', encoding='utf8',
+                   names=names, converters={'hashtags': lambda x: x.split('\t'),
+                                            'present_media': lambda x: x.split('\t'),
+                                            'present_links': lambda x: x.split('\t'),
+                                            'present_domains': lambda x: x.split('\t')})
 
 category = 'like_engagement_timestamp'
 data = add_binary_labels(data, category)
 
-data['number_text_tokens'] = data['text_tokens'].apply(lambda x: str(x).count('\t') + 1)  # number of tokens
-data['number_hashtags'] = data['hashtags'].apply(lambda x: len(x) - 1)  # number of hashtags
+data['number_text_tokens'] = data['text_tokens'].apply(lambda x: str(x).count('\t') + 1, meta=('text_tokens', 'int64'))  # number of tokens
+data['number_hashtags'] = data['hashtags'].apply(lambda x: len(x) - 1, meta=('hashtags', 'int64'))  # number of hashtags
 
-data['present_media'] = data['present_media'].apply(lambda x: len(x) - 1)
-data['present_links'] = data['present_links'].apply(lambda x: len(x) - 1)
-data['present_domains'] = data['present_domains'].apply(lambda x: len(x) - 1)
+data['present_media'] = data['present_media'].apply(lambda x: len(x) - 1, meta=('present_media', 'int64'))
+data['present_links'] = data['present_links'].apply(lambda x: len(x) - 1, meta=('present_links', 'int64'))
+data['present_domains'] = data['present_domains'].apply(lambda x: len(x) - 1, meta=('present_domains', 'int64'))
 
-#data[sparse_features] = data[sparse_features].fillna('-1', )
-#data[dense_features] = data[dense_features].fillna(0, )
+# data[sparse_features] = data[sparse_features].fillna('-1', )
+# data[dense_features] = data[dense_features].fillna(0, )
 data = data[['label'] + dense_features + sparse_features]
 
-#mms = MinMaxScaler(feature_range=(0, 1))
-#data[dense_features] = mms.fit_transform(data[dense_features])
+# mms = MinMaxScaler(feature_range=(0, 1))
+# data[dense_features] = mms.fit_transform(data[dense_features])
 
 print('Split the original dataset into train and valid dataset.')
-data_train, data_valid = train_test_split(data, test_size=0.2)
+data_train, data_valid = train_test_split(data, shuffle=True, test_size=0.2)
 
-#print(data_train)
+# print(data_train)
 
 # Not the best way, follow xdeepfm
 print("Count freq in train")
 freq_dict = cnt_freq_train(data)
 
 print('Generate the feature map and impute the training dataset.')
-feature_map = generate_feature_map_and_train_csv(data_train, 'train_twitter.csv', 'twitter_feature_map', freq_dict,
+feature_map = generate_feature_map_and_train_csv(data_train, 'train_twitter_s.csv', 'twitter_feature_map_s', freq_dict,
                                                  threshold=8)
 print('Impute the valid dataset.')
-generate_valid_csv(data_valid, 'valid_twitter.csv', feature_map)
+generate_valid_csv(data_valid, 'valid_twitter_s.csv', feature_map)
