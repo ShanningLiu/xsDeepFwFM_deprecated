@@ -31,7 +31,10 @@ Map the known feature to existing index and set the unknown as 0.
 
 """
 
-import random, math, os
+import math
+import os
+import random
+
 random.seed(0)
 
 def random_split(inputs, output1, valid):
@@ -59,7 +62,7 @@ def cnt_freq_train(inputs):
     for i in range(40):
         count_freq.append({})
     for idx, line in enumerate(open(inputs)):
-        line = line.replace('\n', '').split(',')
+        line = line.replace('\n', '').split('\t')
         if idx % 1000000 == 0 and idx > 0:
             print(idx)
         for i in range(1, 40):
@@ -78,7 +81,7 @@ def generate_feature_map_and_train_csv(inputs, train_csv, file_feature_map, freq
         feature_map.append({})
     fout = open(train_csv, 'w')
     for idx, line in enumerate(open(inputs)):
-        line = line.replace('\n', '').split(',')
+        line = line.replace('\n', '').split('\t')
         if idx % 1000000 == 0 and idx > 0:
             print(idx)
         output_line = [line[0]]
@@ -119,7 +122,7 @@ def get_feature_size(fname):
     for i in range(40):
         dicts.append(set())
     for line in open(fname):
-        line = line.strip().split(',')
+        line = line.strip().split('\t')
         for i in range(40):
             if line[i] not in dicts[i]:
                 cnts[i] += 1
@@ -136,7 +139,7 @@ def get_feature_size(fname):
 def generate_valid_csv(inputs, valid_csv, feature_map):
     fout = open(valid_csv, 'w')
     for idx, line in enumerate(open(inputs)):
-        line = line.replace('\n', '').split(',')
+        line = line.replace('\n', '').split('\t')
         output_line = [line[0]]
         for i in range(1, 40):
             if i < 14:
@@ -150,14 +153,14 @@ def generate_valid_csv(inputs, valid_csv, feature_map):
         output_line = ','.join(output_line)
         fout.write(output_line + '\n')
 
+file = 'G:\\dac\\train_s.txt'
 print('Split the orignal dataset into train and valid dataset.')
-random_split('train_criteo.txt', 'train1.txt', 'valid.txt')
+random_split(file, 'train1.txt', 'valid.txt')
 #print('Count the frequency.')
 #freq_dict = cnt_freq_train('train1.txt')
 
 # Not the best way, follow xdeepfm
-freq_dict = cnt_freq_train('tiny_train_criteo.txt')
-
+freq_dict = cnt_freq_train(file)
 
 print('Generate the feature map and impute the training dataset.')
 feature_map = generate_feature_map_and_train_csv('train1.txt', 'train_criteo.csv', 'criteo_feature_map', freq_dict, threshold=8)

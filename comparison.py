@@ -8,6 +8,7 @@ from deepctr.feature_column import SparseFeat, DenseFeat, get_feature_names
 
 import tensorflow as tf
 
+# https://stackoverflow.com/questions/41117740/tensorflow-crashes-with-cublas-status-alloc-failed
 gpus = tf.config.experimental.list_physical_devices('GPU')
 if gpus:
     try:
@@ -26,9 +27,7 @@ if __name__ == "__main__":
 
     names = ['label'] + dense_features + sparse_features
 
-    data = pd.read_csv('G:\\dac\\train_ss.txt', names=names, sep='\t')
-
-    print(data)
+    data = pd.read_csv('G:\\dac\\train_s.txt', names=names, sep='\t')
 
     data[sparse_features] = data[sparse_features].fillna('-1', )
     data[dense_features] = data[dense_features].fillna(0, )
@@ -62,7 +61,7 @@ if __name__ == "__main__":
                   metrics=['binary_crossentropy'], )
 
     history = model.fit(train_model_input, train[target].values,
-                        batch_size=1024, epochs=10, verbose=2, validation_split=0.2, )
+                        batch_size=2048, epochs=10, verbose=2, validation_split=0.2, )
     pred_ans = model.predict(test_model_input, batch_size=1024)
     print("test LogLoss", round(log_loss(test[target].values, pred_ans), 4))
     print("test AUC", round(roc_auc_score(test[target].values, pred_ans), 4))
