@@ -12,7 +12,7 @@ import torch
 
 parser = argparse.ArgumentParser(description='Hyperparameter tuning')
 parser.add_argument('-c', default='DeepFwFM', type=str, help='Models: FM, DeepFwFM ...')
-parser.add_argument('-use_cuda', default='1', type=int, help='Use CUDA or not')
+parser.add_argument('-use_cuda', default=1, type=int, help='Use CUDA or not')
 parser.add_argument('-gpu', default=0, type=int, help='GPU id')
 parser.add_argument('-n_epochs', default=8, type=int, help='Number of epochs')
 parser.add_argument('-numerical', default=13, type=int, help='Numerical features, 13 for Criteo')
@@ -42,6 +42,7 @@ parser.add_argument('-random_seed', default=0, type=int, help='Random seed')
 parser.add_argument('-learning_rate', default=0.001, type=float, help='Learning rate')
 parser.add_argument('-momentum', default=0, type=float, help='Momentum')
 parser.add_argument('-l2', default=3e-7, type=float, help='L2 penalty')
+parser.add_argument('-dataset', default='criteo', type=str, help='Used dataset')
 pars = parser.parse_args()
 
 print(pars)
@@ -56,17 +57,19 @@ save_model_name = './saved_models/' + pars.c + '_l2_' + str(pars.l2) + '_sparse_
 criteo_num_feat_dim = set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
 twitter_num_feat_dim = set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
 
-# train_dict = data_preprocess.read_data('./data/tiny_train_input.csv', './data/category_emb', criteo_num_feat_dim, feature_dim_start=0, dim=39)
-# test_dict = data_preprocess.read_data('./data/tiny_test_input.csv', './data/category_emb', criteo_num_feat_dim, feature_dim_start=0, dim=39)
-train_dict = data_preprocess.read_data('./data/large/train_criteo.csv', './data/large/criteo_feature_map', criteo_num_feat_dim, feature_dim_start=1, dim=39)
-test_dict = data_preprocess.read_data('./data/large/valid_criteo.csv', './data/large/criteo_feature_map', criteo_num_feat_dim,feature_dim_start=1, dim=39)
+if pars.dataset == 'criteo':
+    field_size = 39
+    train_dict = data_preprocess.read_data('./data/large/train_criteo_s.csv', './data/large/criteo_feature_map_s', criteo_num_feat_dim, feature_dim_start=1, dim=39)
+    test_dict = data_preprocess.read_data('./data/large/valid_criteo_s.csv', './data/large/criteo_feature_map_s', criteo_num_feat_dim,feature_dim_start=1, dim=39)
+else:
+    field_size = 20
+    pars.numerical = 15
+    train_dict = data_preprocess.read_data('./data/large/train_twitter_s.csv', './data/large/twitter_feature_map_s',
+                                           twitter_num_feat_dim, feature_dim_start=1, dim=20)
+    test_dict = data_preprocess.read_data('./data/large/valid_twitter_s.csv', './data/large/twitter_feature_map_s',
+                                          twitter_num_feat_dim, feature_dim_start=1, dim=20)
 
-'''train_dict = data_preprocess.read_data('./data/large/train_twitter_s.csv', './data/large/twitter_feature_map_s',
-                                       twitter_num_feat_dim, feature_dim_start=1, dim=20)
-test_dict = data_preprocess.read_data('./data/large/valid_twitter_s.csv', './data/large/twitter_feature_map_s',
-                                      twitter_num_feat_dim, feature_dim_start=1, dim=20)'''
-
-model = DeepFMs.DeepFMs(field_size=20, feature_sizes=train_dict['feature_sizes'],
+model = DeepFMs.DeepFMs(field_size=field_size, feature_sizes=train_dict['feature_sizes'],
                         embedding_size=pars.embedding_size, n_epochs=pars.n_epochs,
                         verbose=False, use_cuda=pars.use_cuda, use_fm=pars.use_fm, use_fwfm=pars.use_fwfm,
                         use_ffm=pars.use_ffm, use_deep=pars.use_deep,
