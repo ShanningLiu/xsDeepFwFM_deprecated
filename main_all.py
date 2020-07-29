@@ -6,6 +6,7 @@ import argparse
 import numpy as np
 
 from model import DeepFMs
+from model.Datasets import CriteoDataset
 from utils import data_preprocess
 
 import torch
@@ -37,51 +38,78 @@ parser.add_argument('-sparse', default=0.9, type=float, help='Sparse rate')
 parser.add_argument('-warm', default=10, type=float, help='Warm up epochs before pruning')
 parser.add_argument('-ensemble', default=0, type=int, help='Ensemble models or not')
 parser.add_argument('-embedding_size', default=10, type=int, help='Embedding size')
-parser.add_argument('-batch_size', default=2048, type=int, help='Batch size')
+parser.add_argument('-batch_size', default=4096, type=int, help='Batch size')
 parser.add_argument('-random_seed', default=0, type=int, help='Random seed')
 parser.add_argument('-learning_rate', default=0.001, type=float, help='Learning rate')
 parser.add_argument('-momentum', default=0, type=float, help='Momentum')
 parser.add_argument('-l2', default=3e-7, type=float, help='L2 penalty')
-parser.add_argument('-dataset', default='criteo', type=str, help='Used dataset')
+parser.add_argument('-dataset', default='criteo', type=str, help='Dataset to use')
+parser.add_argument('-generator', default=1, type=int, help='Use generator')
 pars = parser.parse_args()
 
-print(pars)
-np.random.seed(pars.random_seed)
-random.seed(pars.random_seed)
-torch.manual_seed(pars.random_seed)
-torch.cuda.manual_seed(pars.random_seed)
+if __name__ == '__main__':
+    print(pars)
+    np.random.seed(pars.random_seed)
+    random.seed(pars.random_seed)
+    torch.manual_seed(pars.random_seed)
+    torch.cuda.manual_seed(pars.random_seed)
 
-save_model_name = './saved_models/' + pars.c + '_l2_' + str(pars.l2) + '_sparse_' + str(pars.sparse) + '_seed_' + str(
-    pars.random_seed)
+    save_model_name = './saved_models/' + pars.c + '_l2_' + str(pars.l2) + '_sparse_' + str(
+        pars.sparse) + '_seed_' + str(
+        pars.random_seed)
 
-criteo_num_feat_dim = set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
-twitter_num_feat_dim = set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
+    criteo_num_feat_dim = set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
+    twitter_num_feat_dim = set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
 
-if pars.dataset == 'criteo':
-    field_size = 39
-    train_dict = data_preprocess.read_data('./data/large/train_criteo_s.csv', './data/large/criteo_feature_map_s', criteo_num_feat_dim, feature_dim_start=1, dim=39)
-    test_dict = data_preprocess.read_data('./data/large/valid_criteo_s.csv', './data/large/criteo_feature_map_s', criteo_num_feat_dim,feature_dim_start=1, dim=39)
-else:
-    field_size = 20
-    pars.numerical = 15
-    train_dict = data_preprocess.read_data('./data/large/train_twitter_s.csv', './data/large/twitter_feature_map_s',
-                                           twitter_num_feat_dim, feature_dim_start=1, dim=20)
-    test_dict = data_preprocess.read_data('./data/large/valid_twitter_s.csv', './data/large/twitter_feature_map_s',
-                                          twitter_num_feat_dim, feature_dim_start=1, dim=20)
+    if pars.dataset == 'tiny-criteo':
+        field_size = 39
+        train_dict = data_preprocess.read_data('./data/tiny_train_input.csv', './data/category_emb',
+                                               criteo_num_feat_dim,
+                                               feature_dim_start=0, dim=39)
+        valid_dict = data_preprocess.read_data('./data/tiny_test_input.csv', './data/category_emb', criteo_num_feat_dim,
+                                               feature_dim_start=0, dim=39)
+    elif pars.dataset == 'twitter':
+        field_size = 20
+        pars.numerical = 15
+        train_dict = data_preprocess.read_data('./data/large/train_twitter_s.csv', './data/large/twitter_feature_map_s',
+                                               twitter_num_feat_dim, feature_dim_start=1, dim=20)
+        valid_dict = data_preprocess.read_data('./data/large/valid_twitter_s.csv', './data/large/twitter_feature_map_s',
+                                               twitter_num_feat_dim, feature_dim_start=1, dim=20)
+    else:  # criteo dataset
+        field_size = 39
+        train_dict = data_preprocess.read_data('./data/large/train_criteo_s.csv', './data/large/criteo_feature_map_s',
+                                               criteo_num_feat_dim, feature_dim_start=1, dim=39)
+        valid_dict = data_preprocess.read_data('./data/large/valid_criteo_s.csv', './data/large/criteo_feature_map_s',
+                                               criteo_num_feat_dim, feature_dim_start=1, dim=39)
+    
+    model = DeepFMs.DeepFMs(field_size=field_size, feature_sizes=train_dict['feature_sizes'],
+                            embedding_size=pars.embedding_size, n_epochs=pars.n_epochs,
+                            verbose=False, use_cuda=pars.use_cuda, use_fm=pars.use_fm, use_fwfm=pars.use_fwfm,
+                            use_ffm=pars.use_ffm, use_deep=pars.use_deep,
+                            batch_size=pars.batch_size, learning_rate=pars.learning_rate, weight_decay=pars.l2,
+                            momentum=pars.momentum, sparse=pars.sparse, warm=pars.warm,
+                            h_depth=pars.h_depth, deep_nodes=pars.deep_nodes, num_deeps=pars.num_deeps,
+                            numerical=pars.numerical, use_lw=pars.use_lw, use_fwlw=pars.use_fwlw,
+                            use_logit=pars.use_logit, random_seed=pars.random_seed)
+    if pars.use_cuda:
+        model = model.cuda()
 
-model = DeepFMs.DeepFMs(field_size=field_size, feature_sizes=train_dict['feature_sizes'],
-                        embedding_size=pars.embedding_size, n_epochs=pars.n_epochs,
-                        verbose=False, use_cuda=pars.use_cuda, use_fm=pars.use_fm, use_fwfm=pars.use_fwfm,
-                        use_ffm=pars.use_ffm, use_deep=pars.use_deep,
-                        batch_size=pars.batch_size, learning_rate=pars.learning_rate, weight_decay=pars.l2,
-                        momentum=pars.momentum, sparse=pars.sparse, warm=pars.warm,
-                        h_depth=pars.h_depth, deep_nodes=pars.deep_nodes, num_deeps=pars.num_deeps,
-                        numerical=pars.numerical, use_lw=pars.use_lw, use_fwlw=pars.use_fwlw,
-                        use_logit=pars.use_logit, random_seed=pars.random_seed)
-if pars.use_cuda:
-    model = model.cuda()
+    if pars.generator == 1:
+        params = {'batch_size': pars.batch_size,
+                  'shuffle': True,
+                  'num_workers': 0}
 
-model.fit(train_dict['index'], train_dict['value'], train_dict['label'], test_dict['index'],
-          test_dict['value'], test_dict['label'],
-          prune=pars.prune, prune_fm=pars.prune_fm, prune_r=pars.prune_r, prune_deep=pars.prune_deep,
-          save_path=save_model_name, emb_r=pars.emb_r, emb_corr=pars.emb_corr)
+        training_set = CriteoDataset(train_dict['index'], train_dict['value'], train_dict['label'])
+        training_generator = torch.utils.data.DataLoader(training_set, **params)
+
+        valid_set = CriteoDataset(valid_dict['index'], valid_dict['value'], valid_dict['label'])
+        valid_generator = torch.utils.data.DataLoader(valid_set, **params)
+        model.fit_generator(training_generator, valid_generator,
+                  prune=pars.prune, prune_fm=pars.prune_fm, prune_r=pars.prune_r, prune_deep=pars.prune_deep,
+                  save_path=save_model_name, emb_r=pars.emb_r, emb_corr=pars.emb_corr)
+
+    else:
+        model.fit(train_dict['index'], train_dict['value'], train_dict['label'], valid_dict['index'],
+                  valid_dict['value'], valid_dict['label'],
+                  prune=pars.prune, prune_fm=pars.prune_fm, prune_r=pars.prune_r, prune_deep=pars.prune_deep,
+                  save_path=save_model_name, emb_r=pars.emb_r, emb_corr=pars.emb_corr)
