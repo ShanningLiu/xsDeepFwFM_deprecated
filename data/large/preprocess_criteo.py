@@ -153,13 +153,14 @@ def generate_valid_csv(inputs, valid_csv, feature_map):
         output_line = ','.join(output_line)
         fout.write(output_line + '\n')
 
-file = 'G:\\dac\\train_s.txt'
+file = 'C:\\Users\\AndreasPeintner\\Downloads\\dac\\train_s.txt'
 print('Split the orignal dataset into train and valid dataset.')
 random_split(file, 'train1.txt', 'valid.txt')
 #print('Count the frequency.')
 #freq_dict = cnt_freq_train('train1.txt')
 
 # Not the best way, follow xdeepfm
+print("Count freq in train")
 freq_dict = cnt_freq_train(file)
 
 print('Generate the feature map and impute the training dataset.')

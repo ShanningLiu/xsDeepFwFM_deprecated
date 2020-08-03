@@ -6,7 +6,7 @@ import argparse
 import numpy as np
 
 from model import DeepFMs
-from model.Datasets import CriteoDataset
+from model.Datasets import Dataset
 from utils import data_preprocess
 
 import torch
@@ -38,7 +38,7 @@ parser.add_argument('-sparse', default=0.9, type=float, help='Sparse rate')
 parser.add_argument('-warm', default=10, type=float, help='Warm up epochs before pruning')
 parser.add_argument('-ensemble', default=0, type=int, help='Ensemble models or not')
 parser.add_argument('-embedding_size', default=10, type=int, help='Embedding size')
-parser.add_argument('-batch_size', default=4096, type=int, help='Batch size')
+parser.add_argument('-batch_size', default=2048, type=int, help='Batch size')
 parser.add_argument('-random_seed', default=0, type=int, help='Random seed')
 parser.add_argument('-learning_rate', default=0.001, type=float, help='Learning rate')
 parser.add_argument('-momentum', default=0, type=float, help='Momentum')
@@ -63,24 +63,27 @@ if __name__ == '__main__':
 
     if pars.dataset == 'tiny-criteo':
         field_size = 39
+        index_size = 26
         train_dict = data_preprocess.read_data('./data/tiny_train_input.csv', './data/category_emb',
                                                criteo_num_feat_dim,
-                                               feature_dim_start=0, dim=39)
+                                               feature_dim_start=0, dim=field_size)
         valid_dict = data_preprocess.read_data('./data/tiny_test_input.csv', './data/category_emb', criteo_num_feat_dim,
-                                               feature_dim_start=0, dim=39)
+                                               feature_dim_start=0, dim=field_size)
     elif pars.dataset == 'twitter':
         field_size = 20
         pars.numerical = 15
-        train_dict = data_preprocess.read_data('./data/large/train_twitter_s.csv', './data/large/twitter_feature_map_s',
-                                               twitter_num_feat_dim, feature_dim_start=1, dim=20)
-        valid_dict = data_preprocess.read_data('./data/large/valid_twitter_s.csv', './data/large/twitter_feature_map_s',
-                                               twitter_num_feat_dim, feature_dim_start=1, dim=20)
+        index_size = 5
+        train_dict = data_preprocess.read_data('./data/large/train_twitter_large.csv', './data/large/twitter_large_feature_map',
+                                               twitter_num_feat_dim, feature_dim_start=1, dim=field_size, twitter=True)
+        valid_dict = data_preprocess.read_data('./data/large/valid_twitter_large.csv', './data/large/twitter_large_feature_map',
+                                               twitter_num_feat_dim, feature_dim_start=1, dim=field_size, twitter=True)
     else:  # criteo dataset
         field_size = 39
+        index_size = 26
         train_dict = data_preprocess.read_data('./data/large/train_criteo.csv', './data/large/criteo_feature_map',
-                                               criteo_num_feat_dim, feature_dim_start=1, dim=39)
+                                               criteo_num_feat_dim, feature_dim_start=1, dim=field_size)
         valid_dict = data_preprocess.read_data('./data/large/valid_criteo.csv', './data/large/criteo_feature_map',
-                                               criteo_num_feat_dim, feature_dim_start=1, dim=39)
+                                               criteo_num_feat_dim, feature_dim_start=1, dim=field_size)
     
     model = DeepFMs.DeepFMs(field_size=field_size, feature_sizes=train_dict['feature_sizes'],
                             embedding_size=pars.embedding_size, n_epochs=pars.n_epochs,
@@ -99,10 +102,10 @@ if __name__ == '__main__':
                   'shuffle': True,
                   'num_workers': 0}
 
-        training_set = CriteoDataset(train_dict['index'], train_dict['value'], train_dict['label'])
+        training_set = Dataset(train_dict['index'], train_dict['value'], train_dict['label'], size=index_size)
         training_generator = torch.utils.data.DataLoader(training_set, **params)
 
-        valid_set = CriteoDataset(valid_dict['index'], valid_dict['value'], valid_dict['label'])
+        valid_set = Dataset(valid_dict['index'], valid_dict['value'], valid_dict['label'], size=index_size)
         valid_generator = torch.utils.data.DataLoader(valid_set, **params)
         model.fit_generator(training_generator, valid_generator,
                   prune=pars.prune, prune_fm=pars.prune_fm, prune_r=pars.prune_r, prune_deep=pars.prune_deep,
