@@ -77,14 +77,14 @@ if __name__ == '__main__':
                                                twitter_num_feat_dim, feature_dim_start=1, dim=20)
     else:  # criteo dataset
         field_size = 39
-        train_dict = data_preprocess.read_data('./data/large/train_criteo_s.csv', './data/large/criteo_feature_map_s',
+        train_dict = data_preprocess.read_data('./data/large/train_criteo.csv', './data/large/criteo_feature_map',
                                                criteo_num_feat_dim, feature_dim_start=1, dim=39)
-        valid_dict = data_preprocess.read_data('./data/large/valid_criteo_s.csv', './data/large/criteo_feature_map_s',
+        valid_dict = data_preprocess.read_data('./data/large/valid_criteo.csv', './data/large/criteo_feature_map',
                                                criteo_num_feat_dim, feature_dim_start=1, dim=39)
     
     model = DeepFMs.DeepFMs(field_size=field_size, feature_sizes=train_dict['feature_sizes'],
                             embedding_size=pars.embedding_size, n_epochs=pars.n_epochs,
-                            verbose=False, use_cuda=pars.use_cuda, use_fm=pars.use_fm, use_fwfm=pars.use_fwfm,
+                            verbose=True, use_cuda=pars.use_cuda, use_fm=pars.use_fm, use_fwfm=pars.use_fwfm,
                             use_ffm=pars.use_ffm, use_deep=pars.use_deep,
                             batch_size=pars.batch_size, learning_rate=pars.learning_rate, weight_decay=pars.l2,
                             momentum=pars.momentum, sparse=pars.sparse, warm=pars.warm,

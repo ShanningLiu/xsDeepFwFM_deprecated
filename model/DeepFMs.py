@@ -617,11 +617,9 @@ class DeepFMs(torch.nn.Module):
     def fit_generator(self, training_generator, valid_generator=None, early_stopping=False, refit=False, save_path=None, prune=0, prune_fm=0, prune_r=0,
             prune_deep=0, emb_r=1., emb_corr=1.):
 
-        '''
         if save_path and not os.path.exists('/'.join(save_path.split('/')[0:-1])):
-            print("Save path is not existed!")
+            print("Save path does not exist!")
             return
-        '''
 
         is_valid = False
         if valid_generator:
@@ -686,8 +684,8 @@ class DeepFMs(torch.nn.Module):
                 total_loss += loss.data.item()
                 if self.verbose and batch_idx % 100 == 99:
                     eval = self.evaluate(batch_xi, batch_xv, batch_y)
-                    print('[%d, %5d] loss: %.6f metric: %.6f time: %.1f s' %
-                          (epoch + 1, batch_idx + 1, total_loss / 100.0, eval, time() - batch_begin_time))
+                    print('[%d, %5d/%5d] loss: %.6f metric: %.6f time: %.1f s' %
+                          (epoch + 1, batch_idx + 1, len(training_generator), total_loss / 100.0, eval, time() - batch_begin_time))
                     total_loss = 0.0
                     batch_begin_time = time()
 
