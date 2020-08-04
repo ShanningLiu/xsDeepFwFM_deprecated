@@ -1,10 +1,10 @@
 import torch
 import numpy as np
 
-class CriteoDataset(torch.utils.data.Dataset):
-    def __init__(self, X_index, X_value, labels):
+class Dataset(torch.utils.data.Dataset):
+    def __init__(self, X_index, X_value, labels, size):
         self.labels = labels
-        self.X_index = np.array(X_index).reshape((-1, 26, 1))
+        self.X_index = np.array(X_index).reshape((-1, size, 1))
         self.X_value = np.array(X_value)
 
     def __len__(self):

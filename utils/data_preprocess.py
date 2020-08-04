@@ -39,7 +39,7 @@ def read_data(file_path, emb_file, num_list, feature_dim_start=0, dim=39, twitte
         result['label'].append(int(datas[0]))
 
         indexs = [int(item) for i, item in enumerate(datas) if i not in num_list and i != 0]
-        values = [int(item) for i, item in enumerate(datas) if i in num_list]
+        values = [float(item) for i, item in enumerate(datas) if i in num_list]
         result['index'].append(indexs)
         result['value'].append(values)
     return result

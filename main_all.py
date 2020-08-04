@@ -38,7 +38,7 @@ parser.add_argument('-sparse', default=0.9, type=float, help='Sparse rate')
 parser.add_argument('-warm', default=10, type=float, help='Warm up epochs before pruning')
 parser.add_argument('-ensemble', default=0, type=int, help='Ensemble models or not')
 parser.add_argument('-embedding_size', default=10, type=int, help='Embedding size')
-parser.add_argument('-batch_size', default=2048, type=int, help='Batch size')
+parser.add_argument('-batch_size', default=4096, type=int, help='Batch size')
 parser.add_argument('-random_seed', default=0, type=int, help='Random seed')
 parser.add_argument('-learning_rate', default=0.001, type=float, help='Learning rate')
 parser.add_argument('-momentum', default=0, type=float, help='Momentum')
@@ -73,10 +73,10 @@ if __name__ == '__main__':
         field_size = 20
         pars.numerical = 15
         index_size = 5
-        train_dict = data_preprocess.read_data('./data/large/train_twitter_large.csv', './data/large/twitter_large_feature_map',
-                                               twitter_num_feat_dim, feature_dim_start=1, dim=field_size, twitter=True)
-        valid_dict = data_preprocess.read_data('./data/large/valid_twitter_large.csv', './data/large/twitter_large_feature_map',
-                                               twitter_num_feat_dim, feature_dim_start=1, dim=field_size, twitter=True)
+        train_dict = data_preprocess.read_data('./data/large/train_twitter_s.csv', './data/large/twitter_feature_map_s',
+                                               twitter_num_feat_dim, feature_dim_start=1, dim=field_size, twitter=False)
+        valid_dict = data_preprocess.read_data('./data/large/valid_twitter_s.csv', './data/large/twitter_feature_map_s',
+                                               twitter_num_feat_dim, feature_dim_start=1, dim=field_size, twitter=False)
     else:  # criteo dataset
         field_size = 39
         index_size = 26

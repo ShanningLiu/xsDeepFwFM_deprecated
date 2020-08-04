@@ -16,8 +16,8 @@ def random_split(inputs, output1, valid):
     fout1.close()
     fout2.close()
 
-
 # https://github.com/WayneDW/AutoInt/blob/master/Dataprocess/Criteo/scale.py
+# TODO? https://stackoverflow.com/questions/47732108/how-to-scale-dataframes-consistently-minmaxscaler-sklearn
 def scale(x):
     if x == '':
         return '0'
@@ -167,9 +167,10 @@ labels_to_idx = {"reply_engagement_timestamp": 20, "retweet_engagement_timestamp
                  "retweet_with_comment_engagement_timestamp": 22,
                  "like_engagement_timestamp": 23}
 
-file = 'C:\\Users\\AndreasPeintner\\Downloads\\training_s.tsv'
+file = 'C:\\Users\\AndreasPeintner\\Downloads\\training_ss.tsv'
 print('Split the original dataset into train and valid dataset.')
 random_split(file, 'train1.tsv', 'valid.tsv')
+
 
 # Not the best way, follow xdeepfm
 print("Count freq in train")
