@@ -29,6 +29,7 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 
 import torch.backends.cudnn
+from torch.quantization import QuantStub, DeQuantStub
 
 """
     Network structure
@@ -77,7 +78,7 @@ class DeepFMs(torch.nn.Module):
                  use_fm=True, use_fwlw=False, use_lw=True, use_ffm=False, use_fwfm=False, use_deep=True,
                  loss_type='logloss',
                  use_cuda=True, n_class=1, greater_is_better=True, sparse=0.9, warm=10, num_deeps=1, numerical=13,
-                 use_logit=0
+                 use_logit=0, quantization_aware=False, dynamic_quantization=False, static_quantization=False
                  ):
         super(DeepFMs, self).__init__()
         self.field_size = field_size
@@ -115,6 +116,9 @@ class DeepFMs(torch.nn.Module):
         self.target_sparse = sparse
         self.warm = warm
         self.num = numerical
+        self.quantization_aware = quantization_aware
+        self.static_quantization = static_quantization
+        self.dynamic_quantization = dynamic_quantization
         np.random.seed(self.random_seed)
         random.seed(self.random_seed)
         torch.manual_seed(self.random_seed)
@@ -234,6 +238,13 @@ class DeepFMs(torch.nn.Module):
                                 nn.Dropout(self.dropout_deep[i + 1]))
                 setattr(self, 'net_' + str(nidx) + '_fc', nn.Linear(self.deep_layers[-1], 1, bias=False))
 
+            """
+                quantization part
+            """
+            if self.static_quantization or self.dynamic_quantization:
+                self.quant = QuantStub()
+                self.dequant = DeQuantStub()
+
     def forward(self, Xi, Xv):
         """
         :param Xi_train: index input tensor, batch_size * embedding_size * 1
@@ -243,6 +254,9 @@ class DeepFMs(torch.nn.Module):
             fm/fwfm part
         """
         t00 = time()
+        #if self.dynamic_quantization or self.static_quantization:
+            #Xi = self.quant(Xi.float())  # is int64 and quant needs float to work
+            #Xv = self.quant(Xv.float())
         if self.use_logit or self.use_fm or self.use_fwfm:
             # dim: embedding_size * batch * 1, time cost 47%
             Tzero = torch.zeros(Xi.shape[0], 1, dtype=torch.long)
@@ -279,7 +293,7 @@ class DeepFMs(torch.nn.Module):
                 else:
                     # time cost 3%
                     outer_fwfm = torch.einsum('klij,kl->klij', outer_fm,
-                                              (self.field_cov.weight.t() + self.field_cov.weight) * 0.5)
+                                              (self.field_cov.weight.t() + self.field_cov.weight) * 0.5) # TODO weight tensor from quantized linear
                     fm_second_order = (torch.sum(torch.sum(outer_fwfm, 0), 0) - torch.sum(
                         torch.einsum('kkij->kij', outer_fwfm), 0)) * 0.5
                 if self.is_shallow_dropout:
@@ -378,6 +392,8 @@ class DeepFMs(torch.nn.Module):
             total_sum = torch.sum(ffm_first_order, 1) + torch.sum(ffm_second_order, 1) + self.bias
         else:
             total_sum = torch.sum(x_deep, 1) + self.bias
+        """if self.dynamic_quantization or self.static_quantization:
+            return self.dequant(total_sum)"""
         return total_sum
 
     # credit to https://github.com/ChenglongChen/tensorflow-DeepFM/blob/master/DeepFM.py
@@ -571,8 +587,9 @@ class DeepFMs(torch.nn.Module):
                 valid_result.append(valid_eval)
                 print('Validation [%d] loss: %.6f metric: %.6f prauc: %.4f rce: %.2f sparse %.2f%% time: %.1f s' %
                       (
-                      epoch + 1, valid_loss, valid_eval, vaild_prauc, valid_rce, 100 - no_non_sparse * 100. / num_total,
-                      time() - epoch_begin_time))
+                          epoch + 1, valid_loss, valid_eval, vaild_prauc, valid_rce,
+                          100 - no_non_sparse * 100. / num_total,
+                          time() - epoch_begin_time))
             print('*' * 50)
 
             # shuffle training dataset
@@ -613,9 +630,9 @@ class DeepFMs(torch.nn.Module):
         print('Number of pruned DNN parameters: %d' % (num_dnn))
         print("Number of pruned total parameters: %d" % (num_total))
 
-
-    def fit_generator(self, training_generator, valid_generator=None, early_stopping=False, refit=False, save_path=None, prune=0, prune_fm=0, prune_r=0,
-            prune_deep=0, emb_r=1., emb_corr=1.):
+    def fit_generator(self, training_generator, valid_generator=None, early_stopping=False, refit=False, save_path=None,
+                      prune=0, prune_fm=0, prune_r=0,
+                      prune_deep=0, emb_r=1., emb_corr=1.):
 
         if save_path and not os.path.exists('/'.join(save_path.split('/')[0:-1])):
             print("Save path does not exist!")
@@ -685,7 +702,8 @@ class DeepFMs(torch.nn.Module):
                 if self.verbose and batch_idx % 100 == 99:
                     eval = self.evaluate(batch_xi, batch_xv, batch_y)
                     print('[%d, %5d/%5d] loss: %.6f metric: %.6f time: %.1f s' %
-                          (epoch + 1, batch_idx + 1, len(training_generator), total_loss / 100.0, eval, time() - batch_begin_time))
+                          (epoch + 1, batch_idx + 1, len(training_generator), total_loss / 100.0, eval,
+                           time() - batch_begin_time))
                     total_loss = 0.0
                     batch_begin_time = time()
 
@@ -716,7 +734,6 @@ class DeepFMs(torch.nn.Module):
                             mask = abs(symm_sum) < threshold
                             param.data[mask] = 0
                             # print (mask.sum().item(), layer_pars)
-                
 
             # epoch evaluation metrics
             no_non_sparse = 0
@@ -727,13 +744,15 @@ class DeepFMs(torch.nn.Module):
             train_result.append(train_eval)
             print('Training [%d] loss: %.6f metric: %.6f prauc: %.4f rce: %.2f sparse %.2f%% time: %.1f s' %
                   (
-                  epoch + 1, train_loss, train_eval, train_prauc, train_rce, 100 - no_non_sparse * 100. / num_total, time() - epoch_begin_time))
+                      epoch + 1, train_loss, train_eval, train_prauc, train_rce, 100 - no_non_sparse * 100. / num_total,
+                      time() - epoch_begin_time))
             if is_valid:
                 valid_loss, valid_eval, vaild_prauc, valid_rce = self.eval_by_generator(valid_generator)
                 valid_result.append(valid_eval)
                 print('Validation [%d] loss: %.6f metric: %.6f prauc: %.4f rce: %.2f sparse %.2f%% time: %.1f s' %
-                      (epoch + 1, valid_loss, valid_eval, vaild_prauc, valid_rce, 100 - no_non_sparse * 100. / num_total,
-                       time() - epoch_begin_time))
+                      (
+                      epoch + 1, valid_loss, valid_eval, vaild_prauc, valid_rce, 100 - no_non_sparse * 100. / num_total,
+                      time() - epoch_begin_time))
             print('*' * 50)
 
             if save_path:
@@ -807,6 +826,7 @@ class DeepFMs(torch.nn.Module):
             if self.verbose:
                 print("refit finished")
         '''
+
     def eval_by_generator(self, generator):
         print("eval by generator...")
         total_loss = 0.0
@@ -836,6 +856,11 @@ class DeepFMs(torch.nn.Module):
         return total_loss / x_size, total_metric, prauc, rce
 
     def eval_by_batch(self, Xi, Xv, y, x_size):
+        '''if self.quantization_aware:
+            model = torch.quantization.convert(self.eval(), inplace=False)
+        else:
+            model = self.eval()'''  # TODO
+        model = self.eval()
         total_loss = 0.0
         y_pred = []
         if self.use_ffm:
@@ -844,7 +869,6 @@ class DeepFMs(torch.nn.Module):
             batch_size = 8192
         batch_iter = x_size // batch_size
         criterion = F.binary_cross_entropy_with_logits
-        model = self.eval()
         for i in range(batch_iter + 1):
             offset = i * batch_size
             end = min(x_size, offset + batch_size)
@@ -983,3 +1007,22 @@ class DeepFMs(torch.nn.Module):
         """
         y_pred = self.inner_predict_proba(Xi, Xv)
         return self.eval_metric(y.cpu().data.numpy(), y_pred)
+
+    def print_size_of_model(self):
+        torch.save(self.state_dict(), "temp.p")
+        print('Size (MB):', os.path.getsize("temp.p") / 1e6)
+        os.remove('temp.p')
+
+    def time_model_evaluation(self, Xi, Xv, y):
+        torch.set_num_threads(1)
+
+        Xi = np.array(Xi).reshape((-1, self.field_size - self.num, 1))
+        Xv = np.array(Xv)
+        y = np.array(y)
+        x_size = Xi.shape[0]
+
+        s = time()
+        loss, total_metric, prauc, rce = self.eval_by_batch(Xi, Xv, y, x_size)
+        elapsed = time() - s
+
+        print('''loss: {0:.3f}\nelapsed time (seconds): {1:.1f}'''.format(loss, elapsed))
