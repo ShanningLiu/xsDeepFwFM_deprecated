@@ -29,6 +29,7 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 
 import torch.backends.cudnn
+from torch.nn.quantized import QFunctional
 from torch.quantization import QuantStub, DeQuantStub
 
 """
@@ -292,8 +293,14 @@ class DeepFMs(torch.nn.Module):
                         torch.einsum('kkij->kij', outer_fm), 0)) * 0.5
                 else:
                     # time cost 3%
-                    outer_fwfm = torch.einsum('klij,kl->klij', outer_fm,
-                                              (self.field_cov.weight.t() + self.field_cov.weight) * 0.5) # TODO weight tensor from quantized linear
+                    if self.dynamic_quantization or self.static_quantization or self.quantization_aware:
+                        q_func = QFunctional()
+                        q_add = q_func.add(self.field_cov.weight().t(), self.field_cov.weight())
+                        q_add_mul = q_func.mul_scalar(q_add, 0.5)
+                        outer_fwfm = torch.einsum('klij,kl->klij', outer_fm, q_add_mul)
+                    else:
+                        outer_fwfm = torch.einsum('klij,kl->klij', outer_fm,
+                                                  (self.field_cov.weight.t() + self.field_cov.weight) * 0.5) # TODO weight tensor from quantized linear
                     fm_second_order = (torch.sum(torch.sum(outer_fwfm, 0), 0) - torch.sum(
                         torch.einsum('kkij->kij', outer_fwfm), 0)) * 0.5
                 if self.is_shallow_dropout:
@@ -1014,7 +1021,7 @@ class DeepFMs(torch.nn.Module):
         os.remove('temp.p')
 
     def time_model_evaluation(self, Xi, Xv, y):
-        torch.set_num_threads(1)
+        torch.set_num_threads(4)
 
         Xi = np.array(Xi).reshape((-1, self.field_size - self.num, 1))
         Xv = np.array(Xv)
@@ -1025,4 +1032,4 @@ class DeepFMs(torch.nn.Module):
         loss, total_metric, prauc, rce = self.eval_by_batch(Xi, Xv, y, x_size)
         elapsed = time() - s
 
-        print('''loss: {0:.3f}\nelapsed time (seconds): {1:.1f}'''.format(loss, elapsed))
+        print('''Loss: {0:.3f}\tElapsed time (seconds): {1:.1f}'''.format(loss, elapsed))

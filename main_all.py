@@ -8,6 +8,8 @@ import numpy as np
 from model import DeepFMs
 from model.Datasets import Dataset
 from utils import data_preprocess
+from model.Huffmancoding import huffman_encode_model
+from model.WeightSharing import apply_weight_sharing
 
 import torch
 
@@ -48,6 +50,8 @@ parser.add_argument('-generator', default=1, type=int, help='Use generator')
 parser.add_argument('-dynamic_quantization', default=0, type=int, help='Apply dynamic network quantization')
 parser.add_argument('-static_quantization', default=0, type=int, help='Apply static network quantization')
 parser.add_argument('-quantization_aware', default=0, type=int, help='Quantization Aware Training')
+parser.add_argument('-weight_sharing', default=0, type=int, help='Apply K-means clustering algorithm for weights')
+parser.add_argument('-huffman_encoding', default=0, type=int, help='Apply Huffman coding algorithm for each of the weights in the network')
 pars = parser.parse_args()
 
 
@@ -139,6 +143,7 @@ if __name__ == '__main__':
                   prune=pars.prune, prune_fm=pars.prune_fm, prune_r=pars.prune_r, prune_deep=pars.prune_deep,
                   save_path=save_model_name, emb_r=pars.emb_r, emb_corr=pars.emb_corr)
 
+    model = load_model(get_model(cuda=0), save_model_name) # no cuda
     model.print_size_of_model()
     model.time_model_evaluation(valid_dict['index'], valid_dict['value'], valid_dict['label'])
 
@@ -148,10 +153,12 @@ if __name__ == '__main__':
     """
     # quantization (no CUDA allowed and dynamic after training)
     if pars.dynamic_quantization:
-        quantized_model = load_model(get_model(cuda=0), save_model_name)
+        quantized_model = load_model(get_model(cuda=0, dynamic_quantization=1), save_model_name)
+        print(quantized_model)
         quantized_model.eval()
 
         quantized_model = torch.quantization.quantize_dynamic(quantized_model, {torch.nn.Linear}, dtype=torch.qint8)
+        print(quantized_model)
         quantized_model.print_size_of_model()
         quantized_model.time_model_evaluation(valid_dict['index'], valid_dict['value'], valid_dict['label'])
 
@@ -173,3 +180,19 @@ if __name__ == '__main__':
 
         print("Size of model after quantization")
         quantized_model.print_size_of_model()
+
+    if pars.weight_sharing:
+        '''use_cuda = pars.use_cuda and torch.cuda.is_available()
+        device = torch.device("cuda" if use_cuda else 'cpu')
+
+        weight_sharing_model = load_model(get_model(cuda=0), save_model_name)'''
+        weight_sharing_model = apply_weight_sharing(model, bits=5) # TODO not smaller but faster?
+        weight_sharing_model.print_size_of_model()
+        weight_sharing_model.time_model_evaluation(valid_dict['index'], valid_dict['value'], valid_dict['label'])
+
+    if pars.huffman_encoding:
+        use_cuda = pars.use_cuda and torch.cuda.is_available()
+        device = torch.device("cuda" if use_cuda else 'cpu')
+
+        huffmann_model = load_model(get_model(cuda=0), save_model_name)
+        huffman_encode_model(model)
