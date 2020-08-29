@@ -29,7 +29,7 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 
 import torch.backends.cudnn
-from torch.nn.quantized import QFunctional
+from torch.nn.quantized import QFunctional, DeQuantize
 from torch.quantization import QuantStub, DeQuantStub
 
 """
@@ -242,7 +242,7 @@ class DeepFMs(torch.nn.Module):
             """
                 quantization part
             """
-            if self.static_quantization or self.dynamic_quantization:
+            if self.static_quantization or self.quantization_aware:
                 self.quant = QuantStub()
                 self.dequant = DeQuantStub()
 
@@ -255,9 +255,6 @@ class DeepFMs(torch.nn.Module):
             fm/fwfm part
         """
         t00 = time()
-        #if self.dynamic_quantization or self.static_quantization:
-            #Xi = self.quant(Xi.float())  # is int64 and quant needs float to work
-            #Xv = self.quant(Xv.float())
         if self.use_logit or self.use_fm or self.use_fwfm:
             # dim: embedding_size * batch * 1, time cost 47%
             Tzero = torch.zeros(Xi.shape[0], 1, dtype=torch.long)
@@ -292,15 +289,14 @@ class DeepFMs(torch.nn.Module):
                     fm_second_order = (torch.sum(torch.sum(outer_fm, 0), 0) - torch.sum(
                         torch.einsum('kkij->kij', outer_fm), 0)) * 0.5
                 else:
-                    # time cost 3%
+                    # dequantize since einsum is not supported for quantization
+                    # https://discuss.pytorch.org/t/fwfm-quantization/94144/4
                     if self.dynamic_quantization or self.static_quantization or self.quantization_aware:
-                        q_func = QFunctional()
-                        q_add = q_func.add(self.field_cov.weight().t(), self.field_cov.weight())
-                        q_add_mul = q_func.mul_scalar(q_add, 0.5)
-                        outer_fwfm = torch.einsum('klij,kl->klij', outer_fm, q_add_mul)
-                    else:
-                        outer_fwfm = torch.einsum('klij,kl->klij', outer_fm,
-                                                  (self.field_cov.weight.t() + self.field_cov.weight) * 0.5) # TODO weight tensor from quantized linear
+                        self.field_cov = nn.Linear(self.field_size, 1, bias=False)
+
+                    # time cost 3%
+                    outer_fwfm = torch.einsum('klij,kl->klij', outer_fm,
+                                              (self.field_cov.weight.t() + self.field_cov.weight) * 0.5)
                     fm_second_order = (torch.sum(torch.sum(outer_fwfm, 0), 0) - torch.sum(
                         torch.einsum('kkij->kij', outer_fwfm), 0)) * 0.5
                 if self.is_shallow_dropout:
@@ -345,6 +341,9 @@ class DeepFMs(torch.nn.Module):
             else:
                 activation = torch.relu
 
+            if self.static_quantization or self.quantization_aware:
+                deep_emb = self.quant(deep_emb)
+
             deep_embs = {}
             x_deeps = {}
             for nidx in range(1, self.num_deeps + 1):
@@ -373,18 +372,24 @@ class DeepFMs(torch.nn.Module):
             for nidx in range(2, self.num_deeps + 1):
                 x_deep = x_deeps[nidx]
 
+        if self.static_quantization or self.quantization_aware:
+            x_deep = self.dequant(x_deep)
         """
             sum
         """
-
         # print(fm_first_order.shape, "linear dim")
         # print(torch.sum(fm_first_order,1).shape, "sum dim")
 
         # total_sum dim: batch, time cost 1.3%
         if (self.use_fm or self.use_fwfm) and self.use_lw:
             fm_first_order = torch.matmul(fm_first_order, self.fm_1st.weight.t())
+            if self.static_quantization or self.quantization_aware:
+                fm_first_order = self.dequant(fm_first_order)
+
         elif self.use_ffm and self.lw:
             ffm_first_order = torch.matmul(ffm_first_order, self.ffm_1st.weight.t())
+            if self.static_quantization or self.quantization_aware:
+                ffm_first_order = self.dequant(ffm_first_order)
 
         if self.use_logit:
             total_sum = torch.sum(fm_first_order, 1) + self.bias
@@ -399,8 +404,10 @@ class DeepFMs(torch.nn.Module):
             total_sum = torch.sum(ffm_first_order, 1) + torch.sum(ffm_second_order, 1) + self.bias
         else:
             total_sum = torch.sum(x_deep, 1) + self.bias
-        """if self.dynamic_quantization or self.static_quantization:
-            return self.dequant(total_sum)"""
+
+        #if self.quantization_aware:
+         #   return self.quant(total_sum)
+
         return total_sum
 
     # credit to https://github.com/ChenglongChen/tensorflow-DeepFM/blob/master/DeepFM.py
@@ -431,7 +438,7 @@ class DeepFMs(torch.nn.Module):
 
     def fit(self, Xi_train, Xv_train, y_train, Xi_valid=None, Xv_valid=None,
             y_valid=None, early_stopping=False, refit=False, save_path=None, prune=0, prune_fm=0, prune_r=0,
-            prune_deep=0, emb_r=1., emb_corr=1.):
+            prune_deep=0, emb_r=1., emb_corr=1., quantization_aware=False):
         """
         :param Xi_train: [[ind1_1, ind1_2, ...], [ind2_1, ind2_2, ...], ..., [indi_1, indi_2, ..., indi_j, ...], ...]
                         indi_j is the feature index of feature field j of sample i in the training set
@@ -863,11 +870,11 @@ class DeepFMs(torch.nn.Module):
         return total_loss / x_size, total_metric, prauc, rce
 
     def eval_by_batch(self, Xi, Xv, y, x_size):
-        '''if self.quantization_aware:
+        if self.quantization_aware:
             model = torch.quantization.convert(self.eval(), inplace=False)
+            model.eval()
         else:
-            model = self.eval()'''  # TODO
-        model = self.eval()
+            model = self.eval()
         total_loss = 0.0
         y_pred = []
         if self.use_ffm:
@@ -1017,11 +1024,11 @@ class DeepFMs(torch.nn.Module):
 
     def print_size_of_model(self):
         torch.save(self.state_dict(), "temp.p")
-        print('Size (MB):', os.path.getsize("temp.p") / 1e6)
+        print('\tSize (MB):', os.path.getsize("temp.p") / 1e6)
         os.remove('temp.p')
 
     def time_model_evaluation(self, Xi, Xv, y):
-        torch.set_num_threads(4)
+        torch.set_num_threads(1)
 
         Xi = np.array(Xi).reshape((-1, self.field_size - self.num, 1))
         Xv = np.array(Xv)
@@ -1032,4 +1039,4 @@ class DeepFMs(torch.nn.Module):
         loss, total_metric, prauc, rce = self.eval_by_batch(Xi, Xv, y, x_size)
         elapsed = time() - s
 
-        print('''Loss: {0:.3f}\tElapsed time (seconds): {1:.1f}'''.format(loss, elapsed))
+        print('''\tLoss: {0:.3f}\tElapsed time (seconds): {1:.1f}'''.format(loss, elapsed))

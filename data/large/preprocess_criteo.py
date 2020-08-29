@@ -153,7 +153,8 @@ def generate_valid_csv(inputs, valid_csv, feature_map):
         output_line = ','.join(output_line)
         fout.write(output_line + '\n')
 
-file = 'G:\\dac\\train.txt'
+#file = 'G:\\dac\\train_ss.txt'
+file = 'C:\\Users\\AndreasPeintner\\Downloads\\dac\\train_ss.txt'
 print('Split the orignal dataset into train and valid dataset.')
 random_split(file, 'train1.txt', 'valid.txt')
 #print('Count the frequency.')
@@ -163,9 +164,9 @@ random_split(file, 'train1.txt', 'valid.txt')
 freq_dict = cnt_freq_train(file)
 
 print('Generate the feature map and impute the training dataset.')
-feature_map = generate_feature_map_and_train_csv('train1.txt', 'train_criteo.csv', 'criteo_feature_map', freq_dict, threshold=8)
+feature_map = generate_feature_map_and_train_csv('train1.txt', 'train_criteo_ss.csv', 'criteo_feature_map_ss', freq_dict, threshold=8)
 print('Impute the valid dataset.')
-generate_valid_csv('valid.txt', 'valid_criteo.csv', feature_map)
+generate_valid_csv('valid.txt', 'valid_criteo_ss.csv', feature_map)
 print('Delete unnecessary files')
 os.remove('valid.txt')
 os.remove('train1.txt')
