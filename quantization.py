@@ -16,10 +16,11 @@ pars = parser.parse_args()
 
 criteo_num_feat_dim = set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
 field_size = 39
-train_dict = data_preprocess.read_data('./data/large/train_criteo_ss.csv', './data/large/criteo_feature_map_ss',
-                                       criteo_num_feat_dim, feature_dim_start=1, dim=39)
-valid_dict = data_preprocess.read_data('./data/large/valid_criteo_ss.csv', './data/large/criteo_feature_map_ss',
-                                       criteo_num_feat_dim, feature_dim_start=1, dim=39)
+train_dict = data_preprocess.read_data('./data/tiny_train_input.csv', './data/category_emb',
+                                       criteo_num_feat_dim,
+                                       feature_dim_start=0, dim=39)
+valid_dict = data_preprocess.read_data('./data/tiny_test_input.csv', './data/category_emb', criteo_num_feat_dim,
+                                       feature_dim_start=0, dim=39)
 
 if not pars.save_model_name:
     print("no model path given: -save_model_name")
@@ -28,7 +29,7 @@ if not pars.save_model_name:
 model = get_model(cuda=0, feature_sizes=train_dict['feature_sizes'], pars=pars)
 model = load_model(model, pars.save_model_name)
 print('Original model:')
-model.print_size_of_model()
+f = model.print_size_of_model()
 model.time_model_evaluation(valid_dict['index'], valid_dict['value'], valid_dict['label'])
 
 # quantization (no CUDA allowed and dynamic after training)
@@ -38,7 +39,9 @@ if pars.dynamic_quantization:
 
     quantized_model = torch.quantization.quantize_dynamic(quantized_model, {torch.nn.Linear}, dtype=torch.qint8) # TODO if available torch.nn.Embedding, torch.nn.Dropout
     print("Dynamic Quantization model:")
-    quantized_model.print_size_of_model()
+    q = quantized_model.print_size_of_model()
+    print("\t{0:.2f} times smaller".format(f / q))
+
     quantized_model.time_model_evaluation(valid_dict['index'], valid_dict['value'], valid_dict['label'])
 
     torch.save(quantized_model.state_dict(), pars.save_model_name + '_dynamic_quant')

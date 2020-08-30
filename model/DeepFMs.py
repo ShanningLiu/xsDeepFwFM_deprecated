@@ -166,11 +166,11 @@ class DeepFMs(torch.nn.Module):
             LR/fm/fwfm part
         """
         if self.use_logit or self.use_fm or self.use_fwfm:
-            if self.use_logit:
-                print("Init Losgistic regression")
-            elif self.use_fm:
+            if self.use_logit and self.verbose:
+                print("Init Logistic regression")
+            elif self.use_fm and self.verbose:
                 print("Init fm part")
-            else:
+            elif self.verbose:
                 print("Init fwfm part")
             if not self.use_fwlw:
                 self.fm_1st_embeddings = nn.ModuleList(
@@ -211,7 +211,8 @@ class DeepFMs(torch.nn.Module):
             deep parts
         """
         if self.use_deep:
-            print("Init deep part")
+            if self.verbose:
+                print("Init deep part")
             for nidx in range(1, self.num_deeps + 1):
                 if not self.use_fm and not self.use_ffm:
                     self.fm_2nd_embeddings = nn.ModuleList(
@@ -1024,8 +1025,10 @@ class DeepFMs(torch.nn.Module):
 
     def print_size_of_model(self):
         torch.save(self.state_dict(), "temp.p")
-        print('\tSize (MB):', os.path.getsize("temp.p") / 1e6)
+        size = os.path.getsize("temp.p")
+        print('\tSize (MB):', size / 1e6)
         os.remove('temp.p')
+        return size
 
     def time_model_evaluation(self, Xi, Xv, y):
         torch.set_num_threads(1)
@@ -1040,3 +1043,8 @@ class DeepFMs(torch.nn.Module):
         elapsed = time() - s
 
         print('''\tLoss: {0:.3f}\tElapsed time (seconds): {1:.1f}'''.format(loss, elapsed))
+
+        s = time()
+        self.forward(torch.LongTensor([Xi[0]]), torch.LongTensor([Xv[0]]))
+        elapsed = time() - s
+        print('''\t1 Tensor Forward (seconds): {0:.6f}'''.format(elapsed))
