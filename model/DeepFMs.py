@@ -20,6 +20,8 @@ import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.metrics import roc_auc_score, precision_recall_curve, auc, log_loss
 from time import time
+import math
+import logging
 
 import torch
 import torch.autograd as autograd
@@ -61,7 +63,7 @@ class DeepFMs(torch.nn.Module):
     use_fm: bool
     use_ffm: bool
     use_deep: bool
-    loss_type: "logloss", only
+    loss_type: "logloss", only, "softmax" for KD needed?
     eval_metric: roc_auc_score
     use_cuda: bool use gpu or cpu?
     n_class: number of classes. is bounded to 1
@@ -406,8 +408,8 @@ class DeepFMs(torch.nn.Module):
         else:
             total_sum = torch.sum(x_deep, 1) + self.bias
 
-        #if self.quantization_aware:
-         #   return self.quant(total_sum)
+        # if self.quantization_aware:
+        #   return self.quant(total_sum)
 
         return total_sum
 
@@ -439,7 +441,7 @@ class DeepFMs(torch.nn.Module):
 
     def fit(self, Xi_train, Xv_train, y_train, Xi_valid=None, Xv_valid=None,
             y_valid=None, early_stopping=False, refit=False, save_path=None, prune=0, prune_fm=0, prune_r=0,
-            prune_deep=0, emb_r=1., emb_corr=1., quantization_aware=False):
+            prune_deep=0, emb_r=1., emb_corr=1., quantization_aware=False, teacher_model=None):
         """
         :param Xi_train: [[ind1_1, ind1_2, ...], [ind2_1, ind2_2, ...], ..., [indi_1, indi_2, ..., indi_j, ...], ...]
                         indi_j is the feature index of feature field j of sample i in the training set
@@ -531,6 +533,18 @@ class DeepFMs(torch.nn.Module):
             batch_iter = x_size // self.batch_size
             epoch_begin_time = time()
             batch_begin_time = time()
+
+            """
+                teacher model
+            """
+            if teacher_model:
+                # fetch teacher outputs using teacher_model under eval() mode
+                loading_start = time()
+                teacher_model.eval()
+                teacher_outputs = self.fetch_teacher_outputs(teacher_model, Xi_train, Xv_train, x_size)
+                elapsed_time = math.ceil(time() - loading_start)
+                logging.info("- Finished computing teacher outputs after {} secs..".format(elapsed_time))
+
             for i in range(batch_iter + 1):
                 if epoch >= self.warm:
                     n_iter += 1
@@ -545,7 +559,16 @@ class DeepFMs(torch.nn.Module):
                     batch_xi, batch_xv, batch_y = batch_xi.cuda(), batch_xv.cuda(), batch_y.cuda()
                 optimizer.zero_grad()
                 outputs = model(batch_xi, batch_xv)
-                loss = criterion(outputs, batch_y)
+                if teacher_model:
+                    output_teacher_batch = torch.from_numpy(teacher_outputs[i])
+                    if self.use_cuda:
+                        output_teacher_batch = output_teacher_batch.cuda()
+                    output_teacher_batch = Variable(output_teacher_batch, requires_grad=False)
+
+                    loss = self.loss_fn_kd(outputs, output_teacher_batch, batch_y)
+                else:
+                    loss = criterion(outputs, batch_y)
+
                 loss.backward()
                 optimizer.step()
 
@@ -766,8 +789,9 @@ class DeepFMs(torch.nn.Module):
                 valid_result.append(valid_eval)
                 print('Validation [%d] loss: %.6f metric: %.6f prauc: %.4f rce: %.2f sparse %.2f%% time: %.1f s' %
                       (
-                      epoch + 1, valid_loss, valid_eval, vaild_prauc, valid_rce, 100 - no_non_sparse * 100. / num_total,
-                      time() - epoch_begin_time))
+                          epoch + 1, valid_loss, valid_eval, vaild_prauc, valid_rce,
+                          100 - no_non_sparse * 100. / num_total,
+                          time() - epoch_begin_time))
             print('*' * 50)
 
             if save_path:
@@ -1048,3 +1072,39 @@ class DeepFMs(torch.nn.Module):
         self.forward(torch.LongTensor([Xi[0]]), torch.LongTensor([Xv[0]]))
         elapsed = time() - s
         print('''\t1 Tensor Forward (seconds): {0:.6f}'''.format(elapsed))
+
+    def fetch_teacher_outputs(self, teacher_model, Xi, Xv, x_size):
+        teacher_model.eval()
+        teacher_outputs = []
+        batch_size = self.batch_size
+        batch_iter = x_size // batch_size
+        for i in range(batch_iter + 1):
+            offset = i * batch_size
+            end = min(x_size, offset + batch_size)
+            if offset == end:
+                break
+            batch_xi = Variable(torch.LongTensor(Xi[offset:end]))
+            batch_xv = Variable(torch.FloatTensor(Xv[offset:end]))
+            if self.use_cuda:
+                batch_xi, batch_xv = batch_xi.cuda(), batch_xv.cuda()
+
+            output_teacher_batch = teacher_model(batch_xi, batch_xv).data.cpu().numpy()
+            teacher_outputs.append(output_teacher_batch)
+
+        return teacher_outputs
+
+    def loss_fn_kd(self, outputs, teacher_outputs, y):
+        """
+        Compute the knowledge-distillation (KD) loss given outputs, labels.
+        "Hyperparameters": temperature and alpha
+
+        NOTE: the KL Divergence for PyTorch comparing the softmaxs of teacher
+        and student expects the input tensor to be log probabilities! See Issue https://github.com/peterliht/knowledge-distillation-pytorch/issues/2
+        """
+        alpha = 0.9 #params.alpha
+        T = 20 #params.temperature
+        KD_loss = nn.KLDivLoss()(F.log_softmax(outputs / T, dim=0),
+                                 F.softmax(teacher_outputs / T, dim=0)) * (alpha * T * T) + \
+                  F.binary_cross_entropy_with_logits(outputs, y) * (1. - alpha)
+
+        return KD_loss

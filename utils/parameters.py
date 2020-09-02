@@ -27,7 +27,7 @@ def getParser():
     parser.add_argument('-warm', default=10, type=float, help='Warm up epochs before pruning')
     parser.add_argument('-ensemble', default=0, type=int, help='Ensemble models or not')
     parser.add_argument('-embedding_size', default=10, type=int, help='Embedding size')
-    parser.add_argument('-batch_size', default=4096, type=int, help='Batch size')
+    parser.add_argument('-batch_size', default=2048, type=int, help='Batch size')
     parser.add_argument('-random_seed', default=42, type=int, help='Random seed')
     parser.add_argument('-learning_rate', default=0.001, type=float, help='Learning rate')
     parser.add_argument('-momentum', default=0, type=float, help='Momentum')
@@ -39,5 +39,8 @@ def getParser():
     parser.add_argument('-dynamic_quantization', default=0, type=int, help='Apply dynamic network quantization')
     parser.add_argument('-static_quantization', default=0, type=int, help='Apply static network quantization')
     parser.add_argument('-quantization_aware', default=0, type=int, help='Quantization Aware Training')
+    parser.add_argument('-distiller', default=0, type=int, help='Use distiller for compression')
+    parser.add_argument('-kd', default=0, type=int, help='Perform knowledge distillation')
+    parser.add_argument('-loss_type', default='logloss', type=str, help='Used loss (should be logloss but for kd we need softmax)')
 
     return parser
