@@ -45,9 +45,9 @@ if __name__ == '__main__':
                                                twitter_num_feat_dim, feature_dim_start=1, dim=20)
     else:  # criteo dataset
         field_size = 39
-        train_dict = data_preprocess.read_data('./data/large/train_criteo_s.csv', './data/large/criteo_feature_map_s',
+        train_dict = data_preprocess.read_data('./data/large/train_criteo.csv', './data/large/criteo_feature_map',
                                                criteo_num_feat_dim, feature_dim_start=1, dim=39)
-        valid_dict = data_preprocess.read_data('./data/large/valid_criteo_s.csv', './data/large/criteo_feature_map_s',
+        valid_dict = data_preprocess.read_data('./data/large/valid_criteo.csv', './data/large/criteo_feature_map',
                                                criteo_num_feat_dim, feature_dim_start=1, dim=39)
 
     model = get_model(cuda=pars.use_cuda and torch.cuda.is_available(), feature_sizes=train_dict['feature_sizes'],
