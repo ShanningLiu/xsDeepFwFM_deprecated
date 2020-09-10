@@ -34,6 +34,9 @@ import torch.backends.cudnn
 from torch.nn.quantized import QFunctional, DeQuantize
 from torch.quantization import QuantStub, DeQuantStub
 
+from model.MDEmbeddingBag import PrEmbeddingBag
+from model.QREmbeddingBag import QREmbeddingBag
+
 """
     Network structure
 """
@@ -81,8 +84,8 @@ class DeepFMs(torch.nn.Module):
                  use_fm=True, use_fwlw=False, use_lw=True, use_ffm=False, use_fwfm=False, use_deep=True,
                  loss_type='logloss',
                  use_cuda=True, n_class=1, greater_is_better=True, sparse=0.9, warm=10, num_deeps=1, numerical=13,
-                 use_logit=0, quantization_aware=False, dynamic_quantization=False, static_quantization=False
-                 ):
+                 use_logit=0, quantization_aware=False, dynamic_quantization=False, static_quantization=False,
+                 qr_flag=0, qr_operation="mult", qr_collisions=1, qr_threshold=200, md_flag=0, md_threshold=200):
         super(DeepFMs, self).__init__()
         self.field_size = field_size
         self.feature_sizes = feature_sizes
@@ -122,6 +125,13 @@ class DeepFMs(torch.nn.Module):
         self.quantization_aware = quantization_aware
         self.static_quantization = static_quantization
         self.dynamic_quantization = dynamic_quantization
+        self.qr_flag = qr_flag
+        self.qr_operation = qr_operation
+        self.qr_collisions = qr_collisions
+        self.qr_threshold = qr_threshold
+        self.md_flag = md_flag
+        self.md_threshold = md_threshold
+
         np.random.seed(self.random_seed)
         random.seed(self.random_seed)
         torch.manual_seed(self.random_seed)
@@ -175,13 +185,16 @@ class DeepFMs(torch.nn.Module):
             elif self.verbose:
                 print("Init fwfm part")
             if not self.use_fwlw:
-                self.fm_1st_embeddings = nn.ModuleList(
-                    [nn.Embedding(feature_size, 1) for feature_size in self.feature_sizes])
+                # no 1 dim emb bag for md possible
+                if self.md_flag:
+                    self.fm_1st_embeddings = nn.ModuleList(
+                        [nn.Embedding(feature_size, 1) for feature_size in self.feature_sizes])
+                else:
+                    self.fm_1st_embeddings = self.create_emb(1, np.array(self.feature_sizes), sparse=False)
             if self.dropout_shallow:
                 self.fm_first_order_dropout = nn.Dropout(self.dropout_shallow[0])
             if self.use_fm or self.use_fwfm:
-                self.fm_2nd_embeddings = nn.ModuleList(
-                    [nn.Embedding(feature_size, self.embedding_size) for feature_size in self.feature_sizes])
+                self.fm_2nd_embeddings = self.create_emb(self.embedding_size, np.array(self.feature_sizes), sparse=False)
                 if self.dropout_shallow:
                     self.fm_second_order_dropout = nn.Dropout(self.dropout_shallow[1])
 
@@ -217,9 +230,8 @@ class DeepFMs(torch.nn.Module):
                 print("Init deep part")
             for nidx in range(1, self.num_deeps + 1):
                 if not self.use_fm and not self.use_ffm:
-                    self.fm_2nd_embeddings = nn.ModuleList(
-                        [nn.Embedding(feature_size, self.embedding_size) for feature_size in self.feature_sizes])
-
+                    self.fm_2nd_embeddings = self.create_emb(self.embedding_size, np.array(self.feature_sizes),
+                                                             sparse=False)
                 if self.is_deep_dropout:
                     setattr(self, 'net_' + str(nidx) + '_linear_0_dropout', nn.Dropout(self.dropout_deep[0]))
 
@@ -264,9 +276,11 @@ class DeepFMs(torch.nn.Module):
             if self.use_cuda:
                 Tzero = Tzero.cuda()
             if not self.use_fwlw:
-                fm_1st_emb_arr = [(torch.sum(emb(Tzero), 1).t() * Xv[:, i]).t() if i < self.num else torch.sum(
-                    emb(Xi[:, i - self.num, :]), 1) \
-                                  for i, emb in enumerate(self.fm_1st_embeddings)]
+                if self.md_flag:
+                    fm_1st_emb_arr = [(torch.sum(emb(Tzero), 1).t() * Xv[:, i]).t() if i < self.num else torch.sum(emb(Xi[:, i - self.num, :]), 1) for i, emb in enumerate(self.fm_1st_embeddings)]
+                else:
+                    fm_1st_emb_arr = [(emb(Tzero).t() * Xv[:, i]).t() if i < self.num else emb(Xi[:, i - self.num, :]) for i, emb in enumerate(self.fm_1st_embeddings)]
+
                 # dim: batch_size * field_size
                 fm_first_order = torch.cat(fm_1st_emb_arr, 1)
                 if self.is_shallow_dropout:
@@ -274,9 +288,7 @@ class DeepFMs(torch.nn.Module):
                 # print(fm_first_order.shape, "old linear")
             # dim: field_size * batch_size * embedding_size, time cost 43%
             if self.use_fm or self.use_fwfm:
-                fm_2nd_emb_arr = [(torch.sum(emb(Tzero), 1).t() * Xv[:, i]).t() if i < self.num else torch.sum(
-                    emb(Xi[:, i - self.num, :]), 1) \
-                                  for i, emb in enumerate(self.fm_2nd_embeddings)]
+                fm_2nd_emb_arr = [(emb(Tzero).t() * Xv[:, i]).t() if i < self.num else emb(Xi[:, i - self.num, :]) for i, emb in enumerate(self.fm_2nd_embeddings)]
                 # convert a list of tensors to tensor
                 fm_second_order_tensor = torch.stack(fm_2nd_emb_arr)
                 if self.use_fwlw:
@@ -1054,7 +1066,7 @@ class DeepFMs(torch.nn.Module):
         os.remove('temp.p')
         return size
 
-    def time_model_evaluation(self, Xi, Xv, y):
+    def time_model_evaluation(self, Xi, Xv, y, cuda=False):
         torch.set_num_threads(1)
 
         Xi = np.array(Xi).reshape((-1, self.field_size - self.num, 1))
@@ -1066,12 +1078,42 @@ class DeepFMs(torch.nn.Module):
         loss, total_metric, prauc, rce = self.eval_by_batch(Xi, Xv, y, x_size)
         elapsed = time() - s
 
-        print('''\tLoss: {0:.3f}\tElapsed time (seconds): {1:.1f}'''.format(loss, elapsed))
+        print('''\tLoss: {0:.3f}\n\tElapsed time (seconds): {1:.1f}'''.format(loss, elapsed))
+
+        self.eval()
+        Xi_1 = torch.LongTensor([Xi[0]])
+        Xv_1 = torch.LongTensor([Xv[0]])
+        if cuda:
+            Xi_1 = Xi_1.to(device=torch.device('cuda'))
+            Xv_1 = Xv_1.to(device=torch.device('cuda'))
 
         s = time()
-        self.forward(torch.LongTensor([Xi[0]]), torch.LongTensor([Xv[0]]))
+        self.forward(Xi_1, Xv_1)
+        torch.cuda.synchronize()
         elapsed = time() - s
         print('''\t1 Tensor Forward (seconds): {0:.6f}'''.format(elapsed))
+
+    def compute_time(self, device='cuda'):
+        inputs = torch.randn(1, 3, 512, 1024)
+        if device == 'cuda':
+            model = self.cuda()
+            inputs = inputs.cuda()
+
+        self.eval()
+
+        i = 0
+        time_spent = []
+        while i < 100:
+            start_time = time()
+            with torch.no_grad():
+                _ = model(inputs)
+
+            if device == 'cuda':
+                torch.cuda.synchronize()  # wait for cuda to finish (cuda is asynchronous!)
+            if i != 0:
+                time_spent.append(time() - start_time)
+            i += 1
+        print('Avg execution time (ms): {:.3f}'.format(np.mean(time_spent)))
 
     def fetch_teacher_outputs(self, teacher_model, Xi, Xv, x_size):
         teacher_model.eval()
@@ -1108,3 +1150,40 @@ class DeepFMs(torch.nn.Module):
                   F.binary_cross_entropy_with_logits(outputs, y) * (1. - alpha)
 
         return KD_loss
+
+    def create_emb(self, m, ln, sparse=True):
+        emb_l = nn.ModuleList()
+        for i in range(0, ln.size):
+            n = ln[i]
+            # construct embedding operator
+            if self.qr_flag and n > self.qr_threshold:
+                EE = QREmbeddingBag(n, m, self.qr_collisions,
+                                    operation=self.qr_operation, mode="sum", sparse=sparse)
+            elif self.md_flag:
+                base = max(m)
+                _m = m[i] if n > self.md_threshold else base
+                EE = PrEmbeddingBag(n, _m, base)
+                # use np initialization as below for consistency...
+                W = np.random.uniform(
+                    low=-np.sqrt(1 / n), high=np.sqrt(1 / n), size=(n, _m)
+                ).astype(np.float32)
+                EE.embs.weight.data = torch.tensor(W, requires_grad=True)
+
+            else:
+                EE = nn.EmbeddingBag(n, m, mode="sum", sparse=sparse)
+
+                # initialize embeddings
+                # nn.init.uniform_(EE.weight, a=-np.sqrt(1 / n), b=np.sqrt(1 / n))
+                W = np.random.uniform(
+                    low=-np.sqrt(1 / n), high=np.sqrt(1 / n), size=(n, m)
+                ).astype(np.float32)
+                # approach 1
+                EE.weight.data = torch.tensor(W, requires_grad=True)
+                # approach 2
+                # EE.weight.data.copy_(torch.tensor(W))
+                # approach 3
+                # EE.weight = Parameter(torch.tensor(W),requires_grad=True)
+
+            emb_l.append(EE)
+
+        return emb_l
