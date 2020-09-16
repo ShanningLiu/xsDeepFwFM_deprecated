@@ -76,15 +76,15 @@ class DeepFMs(torch.nn.Module):
     Attention: only support logsitcs regression
     """
 
-    def __init__(self, field_size, feature_sizes, embedding_size=4, is_shallow_dropout=True, dropout_shallow=[0.0, 0.0],
+    def __init__(self, field_size, feature_sizes, embedding_size=10, is_shallow_dropout=True, dropout_shallow=[0.0, 0.0],
                  h_depth=3, deep_nodes=400, is_deep_dropout=True, dropout_deep=[0.5, 0.5, 0.5, 0.5],
                  eval_metric=roc_auc_score,
                  deep_layers_activation='relu', n_epochs=64, batch_size=2048, learning_rate=0.001, momentum=0.9,
                  optimizer_type='adam', is_batch_norm=False, verbose=False, random_seed=0, weight_decay=0.0,
-                 use_fm=True, use_fwlw=False, use_lw=True, use_ffm=False, use_fwfm=False, use_deep=True,
+                 use_fm=True, use_fwlw=False, use_lw=False, use_ffm=False, use_fwfm=False, use_deep=True,
                  loss_type='logloss',
                  use_cuda=True, n_class=1, greater_is_better=True, sparse=0.9, warm=10, num_deeps=1, numerical=13,
-                 use_logit=0, quantization_aware=False, dynamic_quantization=False, static_quantization=False,
+                 use_logit=0, embedding_bag=False, quantization_aware=False, dynamic_quantization=False, static_quantization=False,
                  qr_flag=0, qr_operation="mult", qr_collisions=1, qr_threshold=200, md_flag=0, md_threshold=200):
         super(DeepFMs, self).__init__()
         self.field_size = field_size
@@ -122,6 +122,7 @@ class DeepFMs(torch.nn.Module):
         self.target_sparse = sparse
         self.warm = warm
         self.num = numerical
+        self.embedding_bag = embedding_bag
         self.quantization_aware = quantization_aware
         self.static_quantization = static_quantization
         self.dynamic_quantization = dynamic_quantization
@@ -186,7 +187,7 @@ class DeepFMs(torch.nn.Module):
                 print("Init fwfm part")
             if not self.use_fwlw:
                 # no 1 dim emb bag for md possible
-                if self.md_flag:
+                if self.md_flag or not self.embedding_bag:
                     self.fm_1st_embeddings = nn.ModuleList(
                         [nn.Embedding(feature_size, 1) for feature_size in self.feature_sizes])
                 else:
@@ -194,7 +195,11 @@ class DeepFMs(torch.nn.Module):
             if self.dropout_shallow:
                 self.fm_first_order_dropout = nn.Dropout(self.dropout_shallow[0])
             if self.use_fm or self.use_fwfm:
-                self.fm_2nd_embeddings = self.create_emb(self.embedding_size, np.array(self.feature_sizes), sparse=False)
+                if self.embedding_bag:
+                    self.fm_2nd_embeddings = self.create_emb(self.embedding_size, np.array(self.feature_sizes), sparse=False)
+                else:
+                    self.fm_2nd_embeddings = nn.ModuleList(
+                        [nn.Embedding(feature_size, self.embedding_size) for feature_size in self.feature_sizes])
                 if self.dropout_shallow:
                     self.fm_second_order_dropout = nn.Dropout(self.dropout_shallow[1])
 
@@ -210,7 +215,7 @@ class DeepFMs(torch.nn.Module):
         """
             ffm part
         """
-        if self.use_ffm:
+        if self.use_ffm:  # TODO if used embedding_bag
             print("Init ffm part")
             self.ffm_1st_embeddings = nn.ModuleList(
                 [nn.Embedding(feature_size, 1) for feature_size in self.feature_sizes])
@@ -230,8 +235,12 @@ class DeepFMs(torch.nn.Module):
                 print("Init deep part")
             for nidx in range(1, self.num_deeps + 1):
                 if not self.use_fm and not self.use_ffm:
-                    self.fm_2nd_embeddings = self.create_emb(self.embedding_size, np.array(self.feature_sizes),
-                                                             sparse=False)
+                    if self.embedding_bag:
+                        self.fm_2nd_embeddings = self.create_emb(self.embedding_size, np.array(self.feature_sizes),
+                                                                 sparse=False)
+                    else:
+                        self.fm_2nd_embeddings = nn.ModuleList(
+                            [nn.Embedding(feature_size, self.embedding_size) for feature_size in self.feature_sizes])
                 if self.is_deep_dropout:
                     setattr(self, 'net_' + str(nidx) + '_linear_0_dropout', nn.Dropout(self.dropout_deep[0]))
 
@@ -257,7 +266,7 @@ class DeepFMs(torch.nn.Module):
             """
                 quantization part
             """
-            if self.static_quantization or self.quantization_aware:
+            if self.static_quantization or self.quantization_aware or self.dynamic_quantization:
                 self.quant = QuantStub()
                 self.dequant = DeQuantStub()
 
@@ -276,7 +285,7 @@ class DeepFMs(torch.nn.Module):
             if self.use_cuda:
                 Tzero = Tzero.cuda()
             if not self.use_fwlw:
-                if self.md_flag:
+                if self.md_flag or not self.embedding_bag:
                     fm_1st_emb_arr = [(torch.sum(emb(Tzero), 1).t() * Xv[:, i]).t() if i < self.num else torch.sum(emb(Xi[:, i - self.num, :]), 1) for i, emb in enumerate(self.fm_1st_embeddings)]
                 else:
                     fm_1st_emb_arr = [(emb(Tzero).t() * Xv[:, i]).t() if i < self.num else emb(Xi[:, i - self.num, :]) for i, emb in enumerate(self.fm_1st_embeddings)]
@@ -288,7 +297,10 @@ class DeepFMs(torch.nn.Module):
                 # print(fm_first_order.shape, "old linear")
             # dim: field_size * batch_size * embedding_size, time cost 43%
             if self.use_fm or self.use_fwfm:
-                fm_2nd_emb_arr = [(emb(Tzero).t() * Xv[:, i]).t() if i < self.num else emb(Xi[:, i - self.num, :]) for i, emb in enumerate(self.fm_2nd_embeddings)]
+                if self.embedding_bag:
+                    fm_2nd_emb_arr = [(emb(Tzero).t() * Xv[:, i]).t() if i < self.num else emb(Xi[:, i - self.num, :]) for i, emb in enumerate(self.fm_2nd_embeddings)]
+                else:
+                    fm_2nd_emb_arr = [(torch.sum(emb(Tzero), 1).t() * Xv[:, i]).t() if i < self.num else torch.sum(emb(Xi[:, i - self.num, :]), 1) for i, emb in enumerate(self.fm_2nd_embeddings)]
                 # convert a list of tensors to tensor
                 fm_second_order_tensor = torch.stack(fm_2nd_emb_arr)
                 if self.use_fwlw:
@@ -305,13 +317,21 @@ class DeepFMs(torch.nn.Module):
                         torch.einsum('kkij->kij', outer_fm), 0)) * 0.5
                 else:
                     # dequantize since einsum is not supported for quantization
-                    # https://discuss.pytorch.org/t/fwfm-quantization/94144/4
                     if self.dynamic_quantization or self.static_quantization or self.quantization_aware:
-                        self.field_cov = nn.Linear(self.field_size, 1, bias=False)
-
+                        '''q_func = QFunctional()
+                        q_add = q_func.add(self.field_cov.weight().t(), self.field_cov.weight()) # without transpose better?
+                        q_add_mul = q_func.mul_scalar(q_add, 0.5)
+                        outer_fwfm = torch.einsum('klij,kl->klij', outer_fm, torch.dequantize(q_add_mul))'''
+                        # better for loss:
+                        if self.field_cov._packed_params.dtype == torch.float16:
+                            outer_fwfm = torch.einsum('klij,kl->klij', outer_fm, (self.field_cov.weight().t() + self.field_cov.weight()) * 0.5)
+                        else:
+                            outer_fwfm = torch.einsum('klij,kl->klij', outer_fm, (torch.dequantize(self.field_cov.weight().t()) + torch.dequantize(self.field_cov.weight())) * 0.5)
                     # time cost 3%
-                    outer_fwfm = torch.einsum('klij,kl->klij', outer_fm,
+                    else:
+                        outer_fwfm = torch.einsum('klij,kl->klij', outer_fm,
                                               (self.field_cov.weight.t() + self.field_cov.weight) * 0.5)
+
                     fm_second_order = (torch.sum(torch.sum(outer_fwfm, 0), 0) - torch.sum(
                         torch.einsum('kkij->kij', outer_fwfm), 0)) * 0.5
                 if self.is_shallow_dropout:
@@ -387,7 +407,8 @@ class DeepFMs(torch.nn.Module):
             for nidx in range(2, self.num_deeps + 1):
                 x_deep = x_deeps[nidx]
 
-        if self.static_quantization or self.quantization_aware:
+        # sum operation is not supported by quantization
+        if self.static_quantization or self.quantization_aware: # TODO self.dynamic_quantization
             x_deep = self.dequant(x_deep)
         """
             sum
@@ -453,7 +474,7 @@ class DeepFMs(torch.nn.Module):
 
     def fit(self, Xi_train, Xv_train, y_train, Xi_valid=None, Xv_valid=None,
             y_valid=None, early_stopping=False, refit=False, save_path=None, prune=0, prune_fm=0, prune_r=0,
-            prune_deep=0, emb_r=1., emb_corr=1., quantization_aware=False, teacher_model=None):
+            prune_deep=0, emb_r=1., emb_corr=1., teacher_model=None):
         """
         :param Xi_train: [[ind1_1, ind1_2, ...], [ind2_1, ind2_2, ...], ..., [indi_1, indi_2, ..., indi_j, ...], ...]
                         indi_j is the feature index of feature field j of sample i in the training set
@@ -1078,42 +1099,28 @@ class DeepFMs(torch.nn.Module):
         loss, total_metric, prauc, rce = self.eval_by_batch(Xi, Xv, y, x_size)
         elapsed = time() - s
 
-        print('''\tLoss: {0:.3f}\n\tElapsed time (seconds): {1:.1f}'''.format(loss, elapsed))
+        print('''\tLoss: {0:.3f}\n\tAcc: {1:.3f}\n\tElapsed time (seconds): {2:.3f}'''.format(loss, total_metric, elapsed))
 
-        self.eval()
         Xi_1 = torch.LongTensor([Xi[0]])
         Xv_1 = torch.LongTensor([Xv[0]])
         if cuda:
-            Xi_1 = Xi_1.to(device=torch.device('cuda'))
-            Xv_1 = Xv_1.to(device=torch.device('cuda'))
-
-        s = time()
-        self.forward(Xi_1, Xv_1)
-        torch.cuda.synchronize()
-        elapsed = time() - s
-        print('''\t1 Tensor Forward (seconds): {0:.6f}'''.format(elapsed))
-
-    def compute_time(self, device='cuda'):
-        inputs = torch.randn(1, 3, 512, 1024)
-        if device == 'cuda':
-            model = self.cuda()
-            inputs = inputs.cuda()
+            Xi_1 = Xi_1.cuda()
+            Xv_1 = Xv_1.cuda()
 
         self.eval()
 
         i = 0
         time_spent = []
-        while i < 100:
+        while i < 500:
             start_time = time()
             with torch.no_grad():
-                _ = model(inputs)
-
-            if device == 'cuda':
+                _ = self(Xi_1, Xv_1)
+            if cuda:
                 torch.cuda.synchronize()  # wait for cuda to finish (cuda is asynchronous!)
             if i != 0:
                 time_spent.append(time() - start_time)
             i += 1
-        print('Avg execution time (ms): {:.3f}'.format(np.mean(time_spent)))
+        print('\tAvg execution time per forward(ms): {:.5f}'.format(np.mean(time_spent)))
 
     def fetch_teacher_outputs(self, teacher_model, Xi, Xv, x_size):
         teacher_model.eval()

@@ -19,5 +19,6 @@ def get_model(cuda, feature_sizes, pars, dynamic_quantization=False, static_quan
                            numerical=pars.numerical, use_lw=pars.use_lw, use_fwlw=pars.use_fwlw,
                            use_logit=pars.use_logit, random_seed=pars.random_seed,
                            quantization_aware=quantization_aware, dynamic_quantization=dynamic_quantization,
-                           static_quantization=static_quantization, loss_type=pars.loss_type, qr_flag=pars.qr_flag, qr_operation=pars.qr_operation, qr_collisions=pars.qr_collisions,
+                           static_quantization=static_quantization, loss_type=pars.loss_type, embedding_bag=pars.embedding_bag,
+                           qr_flag=pars.qr_flag, qr_operation=pars.qr_operation, qr_collisions=pars.qr_collisions,
                            qr_threshold=pars.qr_threshold, md_flag=pars.md_flag, md_threshold=pars.md_threshold)

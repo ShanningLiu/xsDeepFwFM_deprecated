@@ -39,6 +39,7 @@ def getParser():
     parser.add_argument('-quantization_aware', default=0, type=int, help='Quantization Aware Training')
     parser.add_argument('-kd', default=0, type=int, help='Perform knowledge distillation')
     parser.add_argument('-loss_type', default='logloss', type=str, help='Used loss (should be logloss but for kd we need softmax)')
+    parser.add_argument('-embedding_bag', default=0, type=int, help='Use embedding bag')
     parser.add_argument('-qr_flag', default=0, type=int)
     parser.add_argument('-qr_operation', default="mult", type=str)
     parser.add_argument('-qr_collisions', default=1, type=int)

@@ -65,8 +65,12 @@ if __name__ == '__main__':
               prune=pars.prune, prune_fm=pars.prune_fm, prune_r=pars.prune_r, prune_deep=pars.prune_deep,
               save_path=save_model_name, emb_r=pars.emb_r, emb_corr=pars.emb_corr)
 
-    # measure on CPU
-    #model = get_model(cuda=0, feature_sizes=train_dict['feature_sizes'], pars=pars)
-    #model = load_model(model, save_model_name)
+    # measurement
+    time_on_cuda = False
+    model = get_model(cuda=time_on_cuda, feature_sizes=train_dict['feature_sizes'], pars=pars)
+    model = load_model(model, save_model_name)
+    if time_on_cuda:
+        model = model.cuda()
+
     model.print_size_of_model()
-    model.time_model_evaluation(valid_dict['index'], valid_dict['value'], valid_dict['label'], cuda=True)
+    model.time_model_evaluation(valid_dict['index'], valid_dict['value'], valid_dict['label'], cuda=time_on_cuda)
