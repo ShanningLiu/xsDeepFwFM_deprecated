@@ -1,12 +1,11 @@
 import torch
 from model import DeepFMs
 
-def load_model(model, model_file):
+def load_model_dic(model, model_file):
     state_dict = torch.load(model_file)
     model.load_state_dict(state_dict)
     #model.to('cpu')
     return model
-
 
 def get_model(cuda, feature_sizes, pars, dynamic_quantization=False, static_quantization=False, quantization_aware=False, field_size=39, deep_nodes=400, h_depth=3, use_deep=True):
     return DeepFMs.DeepFMs(field_size=field_size, feature_sizes=feature_sizes,

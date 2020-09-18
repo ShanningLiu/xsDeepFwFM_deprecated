@@ -8,7 +8,7 @@ from model import DeepFMs
 from model.Datasets import Dataset
 from utils import data_preprocess
 from utils.parameters import getParser
-from utils.util import get_model, load_model
+from utils.util import get_model, load_model_dic
 
 parser = getParser()
 pars = parser.parse_args()
@@ -52,8 +52,7 @@ if __name__ == '__main__':
         valid_dict = data_preprocess.read_data('./data/large/valid_criteo_s.csv', './data/large/criteo_feature_map_s',
                                                criteo_num_feat_dim, feature_dim_start=1, dim=39)
 
-    model = get_model(cuda=pars.use_cuda and torch.cuda.is_available(), feature_sizes=train_dict['feature_sizes'],
-                      pars=pars)
+    model = get_model(cuda=pars.use_cuda and torch.cuda.is_available(), feature_sizes=train_dict['feature_sizes'], use_deep=pars.use_deep, pars=pars)
     if pars.use_cuda and torch.cuda.is_available():
         torch.cuda.empty_cache()
         model = model.cuda()
@@ -67,8 +66,8 @@ if __name__ == '__main__':
 
     # measurement
     time_on_cuda = False
-    model = get_model(cuda=time_on_cuda, feature_sizes=train_dict['feature_sizes'], pars=pars)
-    model = load_model(model, save_model_name)
+    model = get_model(cuda=time_on_cuda, feature_sizes=train_dict['feature_sizes'], use_deep=pars.use_deep, pars=pars)
+    model = load_model_dic(model, save_model_name)
     if time_on_cuda:
         model = model.cuda()
 

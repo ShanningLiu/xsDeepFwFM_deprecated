@@ -84,7 +84,7 @@ class DeepFMs(torch.nn.Module):
                  use_fm=True, use_fwlw=False, use_lw=False, use_ffm=False, use_fwfm=False, use_deep=True,
                  loss_type='logloss',
                  use_cuda=True, n_class=1, greater_is_better=True, sparse=0.9, warm=10, num_deeps=1, numerical=13,
-                 use_logit=0, embedding_bag=False, quantization_aware=False, dynamic_quantization=False, static_quantization=False,
+                 use_logit=0, embedding_bag=False, quantization_aware=False, dynamic_quantization=False, static_quantization=False, static_calibrate=False,
                  qr_flag=0, qr_operation="mult", qr_collisions=1, qr_threshold=200, md_flag=0, md_threshold=200):
         super(DeepFMs, self).__init__()
         self.field_size = field_size
@@ -125,6 +125,7 @@ class DeepFMs(torch.nn.Module):
         self.embedding_bag = embedding_bag
         self.quantization_aware = quantization_aware
         self.static_quantization = static_quantization
+        self.static_calibrate = static_calibrate
         self.dynamic_quantization = dynamic_quantization
         self.qr_flag = qr_flag
         self.qr_operation = qr_operation
@@ -132,6 +133,7 @@ class DeepFMs(torch.nn.Module):
         self.qr_threshold = qr_threshold
         self.md_flag = md_flag
         self.md_threshold = md_threshold
+
 
         np.random.seed(self.random_seed)
         random.seed(self.random_seed)
@@ -266,7 +268,7 @@ class DeepFMs(torch.nn.Module):
             """
                 quantization part
             """
-            if self.static_quantization or self.quantization_aware or self.dynamic_quantization:
+            if (self.static_quantization or self.quantization_aware) and self.use_deep:
                 self.quant = QuantStub()
                 self.dequant = DeQuantStub()
 
@@ -275,6 +277,7 @@ class DeepFMs(torch.nn.Module):
         :param Xi_train: index input tensor, batch_size * embedding_size * 1
         :return: the last output
         """
+
         """
             fm/fwfm part
         """
@@ -317,16 +320,17 @@ class DeepFMs(torch.nn.Module):
                         torch.einsum('kkij->kij', outer_fm), 0)) * 0.5
                 else:
                     # dequantize since einsum is not supported for quantization
-                    if self.dynamic_quantization or self.static_quantization or self.quantization_aware:
+                    if self.dynamic_quantization or (self.static_quantization and not self.static_calibrate) or (self.quantization_aware and not self.use_cuda):
                         '''q_func = QFunctional()
                         q_add = q_func.add(self.field_cov.weight().t(), self.field_cov.weight()) # without transpose better?
                         q_add_mul = q_func.mul_scalar(q_add, 0.5)
                         outer_fwfm = torch.einsum('klij,kl->klij', outer_fm, torch.dequantize(q_add_mul))'''
                         # better for loss:
-                        if self.field_cov._packed_params.dtype == torch.float16:
+                        if hasattr(self.field_cov, '_packed_params') and self.field_cov._packed_params.dtype == torch.float16:
                             outer_fwfm = torch.einsum('klij,kl->klij', outer_fm, (self.field_cov.weight().t() + self.field_cov.weight()) * 0.5)
                         else:
-                            outer_fwfm = torch.einsum('klij,kl->klij', outer_fm, (torch.dequantize(self.field_cov.weight().t()) + torch.dequantize(self.field_cov.weight())) * 0.5)
+                            outer_fwfm = torch.einsum('klij,kl->klij', outer_fm, (self.field_cov.weight().dequantize().t() + self.field_cov.weight().dequantize()) * 0.5)
+
                     # time cost 3%
                     else:
                         outer_fwfm = torch.einsum('klij,kl->klij', outer_fm,
@@ -376,8 +380,9 @@ class DeepFMs(torch.nn.Module):
             else:
                 activation = torch.relu
 
-            if self.static_quantization or self.quantization_aware:
-                deep_emb = self.quant(deep_emb)
+            if (self.static_quantization and not self.static_calibrate) or (self.quantization_aware and not self.use_cuda):
+                #deep_emb = self.quant(deep_emb)
+                deep_emb = torch.quantize_per_tensor(deep_emb, 0.1, 10, torch.quint8)
 
             deep_embs = {}
             x_deeps = {}
@@ -407,9 +412,9 @@ class DeepFMs(torch.nn.Module):
             for nidx in range(2, self.num_deeps + 1):
                 x_deep = x_deeps[nidx]
 
-        # sum operation is not supported by quantization
-        if self.static_quantization or self.quantization_aware: # TODO self.dynamic_quantization
-            x_deep = self.dequant(x_deep)
+            if (self.static_quantization and not self.static_calibrate) or (self.quantization_aware and not self.use_cuda):
+                x_deep = self.dequant(x_deep)
+
         """
             sum
         """
@@ -441,9 +446,6 @@ class DeepFMs(torch.nn.Module):
         else:
             total_sum = torch.sum(x_deep, 1) + self.bias
 
-        # if self.quantization_aware:
-        #   return self.quant(total_sum)
-
         return total_sum
 
     # credit to https://github.com/ChenglongChen/tensorflow-DeepFM/blob/master/DeepFM.py
@@ -474,7 +476,7 @@ class DeepFMs(torch.nn.Module):
 
     def fit(self, Xi_train, Xv_train, y_train, Xi_valid=None, Xv_valid=None,
             y_valid=None, early_stopping=False, refit=False, save_path=None, prune=0, prune_fm=0, prune_r=0,
-            prune_deep=0, emb_r=1., emb_corr=1., teacher_model=None):
+            prune_deep=0, emb_r=1., emb_corr=1., quantization_aware=False, teacher_model=None):
         """
         :param Xi_train: [[ind1_1, ind1_2, ...], [ind2_1, ind2_2, ...], ..., [indi_1, indi_2, ..., indi_j, ...], ...]
                         indi_j is the feature index of feature field j of sample i in the training set
@@ -676,6 +678,17 @@ class DeepFMs(torch.nn.Module):
             if is_valid and early_stopping and self.training_termination(valid_result):
                 print("early stop at [%d] epoch!" % (epoch + 1))
                 break
+
+            # quantization aware training
+            if self.quantization_aware:
+                self.cuda()
+                self.use_cuda = True
+                if epoch > self.n_epochs - 2: # TODO right number of epochs
+                    # Freeze quantizer parameters
+                    self.apply(torch.quantization.disable_observer)
+                if epoch > self.n_epochs - 1:
+                    # Freeze batch norm mean and variance estimates
+                    self.apply(torch.nn.intrinsic.qat.freeze_bn_stats)
 
         # summary
         num_total = 0
@@ -929,7 +942,9 @@ class DeepFMs(torch.nn.Module):
 
     def eval_by_batch(self, Xi, Xv, y, x_size):
         if self.quantization_aware:
-            model = torch.quantization.convert(self.eval(), inplace=False)
+            model = self.to('cpu')
+            model.use_cuda = False
+            model = torch.quantization.convert(model.eval(), inplace=False)
             model.eval()
         else:
             model = self.eval()
@@ -1087,7 +1102,7 @@ class DeepFMs(torch.nn.Module):
         os.remove('temp.p')
         return size
 
-    def time_model_evaluation(self, Xi, Xv, y, cuda=False):
+    def time_model_evaluation(self, Xi, Xv, y, cuda=False, quantization_aware=False):
         torch.set_num_threads(1)
 
         Xi = np.array(Xi).reshape((-1, self.field_size - self.num, 1))
@@ -1102,19 +1117,25 @@ class DeepFMs(torch.nn.Module):
         print('''\tLoss: {0:.3f}\n\tAcc: {1:.3f}\n\tElapsed time (seconds): {2:.3f}'''.format(loss, total_metric, elapsed))
 
         Xi_1 = torch.LongTensor([Xi[0]])
-        Xv_1 = torch.LongTensor([Xv[0]])
+        Xv_1 = torch.FloatTensor([Xv[0]])
         if cuda:
             Xi_1 = Xi_1.cuda()
             Xv_1 = Xv_1.cuda()
 
-        self.eval()
+        if self.quantization_aware:
+            model = self.to('cpu')
+            model.use_cuda = False
+            model = torch.quantization.convert(model.eval(), inplace=False)
+            model.eval()
+        else:
+            model = self.eval()
 
         i = 0
         time_spent = []
         while i < 500:
             start_time = time()
             with torch.no_grad():
-                _ = self(Xi_1, Xv_1)
+                _ = model(Xi_1, Xv_1)
             if cuda:
                 torch.cuda.synchronize()  # wait for cuda to finish (cuda is asynchronous!)
             if i != 0:
