@@ -380,9 +380,9 @@ class DeepFMs(torch.nn.Module):
             else:
                 activation = torch.relu
 
-            if (self.static_quantization and not self.static_calibrate) or (self.quantization_aware and not self.use_cuda):
-                #deep_emb = self.quant(deep_emb)
-                deep_emb = torch.quantize_per_tensor(deep_emb, 0.1, 10, torch.quint8)
+            if self.static_quantization or self.quantization_aware:
+                deep_emb = self.quant(deep_emb)
+                #deep_emb = torch.quantize_per_tensor(deep_emb, 0.1, 100, torch.quint8)
 
             deep_embs = {}
             x_deeps = {}
@@ -412,7 +412,7 @@ class DeepFMs(torch.nn.Module):
             for nidx in range(2, self.num_deeps + 1):
                 x_deep = x_deeps[nidx]
 
-            if (self.static_quantization and not self.static_calibrate) or (self.quantization_aware and not self.use_cuda):
+            if self.static_quantization or self.quantization_aware:
                 x_deep = self.dequant(x_deep)
 
         """
@@ -424,13 +424,9 @@ class DeepFMs(torch.nn.Module):
         # total_sum dim: batch, time cost 1.3%
         if (self.use_fm or self.use_fwfm) and self.use_lw:
             fm_first_order = torch.matmul(fm_first_order, self.fm_1st.weight.t())
-            if self.static_quantization or self.quantization_aware:
-                fm_first_order = self.dequant(fm_first_order)
 
         elif self.use_ffm and self.lw:
             ffm_first_order = torch.matmul(ffm_first_order, self.ffm_1st.weight.t())
-            if self.static_quantization or self.quantization_aware:
-                ffm_first_order = self.dequant(ffm_first_order)
 
         if self.use_logit:
             total_sum = torch.sum(fm_first_order, 1) + self.bias

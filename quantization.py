@@ -24,6 +24,7 @@ valid_dict = data_preprocess.read_data('./data/large/valid_criteo_s.csv', './dat
 if not pars.save_model_name:
     print("no model path given: -save_model_name")
     sys.exit()
+
 '''
 model = get_model(cuda=0, feature_sizes=train_dict['feature_sizes'], pars=pars)
 model = load_model_dic(model, pars.save_model_name)
@@ -40,7 +41,6 @@ if pars.dynamic_quantization:
     quantized_model = load_model_dic(get_model(cuda=0, feature_sizes=train_dict['feature_sizes'], dynamic_quantization=True, pars=pars), pars.save_model_name)
 
     quantized_model.eval()
-    #print(quantized_model.field_cov.weight)
     quantized_model = torch.quantization.quantize_dynamic(quantized_model, {torch.nn.Linear}, dtype=torch.qint8) # TODO float16 for better loss and acc; if available torch.nn.Embedding, torch.nn.Dropout and
 
     #print(torch.dequantize(quantized_model.field_cov.weight()))
@@ -58,13 +58,13 @@ if pars.dynamic_quantization:
 if pars.static_quantization:  # https://pytorch.org/tutorials/advanced/static_quantization_tutorial.html
     quantized_model = load_model_dic(get_model(cuda=0, feature_sizes=train_dict['feature_sizes'], static_quantization=True, use_deep=pars.use_deep, pars=pars), pars.save_model_name)
     quantized_model.eval()
-    print(quantized_model)
 
-    quantized_model.qconfig = torch.quantization.get_default_qconfig('fbgemm')
+    quantized_model.qconfig = torch.quantization.get_default_qconfig('qnnpack') # 'fbgemm' works bad?
+    torch.backends.quantized.engine = 'fbgemm'
     print(quantized_model.qconfig)
     torch.quantization.prepare(quantized_model, inplace=True)
 
-    print(quantized_model)
+    #print(quantized_model)
 
     # Calibrate
     quantized_model.static_calibrate = True
@@ -96,7 +96,8 @@ if pars.static_quantization:  # https://pytorch.org/tutorials/advanced/static_qu
 if pars.quantization_aware: 
     quantized_model = get_model(cuda=1, feature_sizes=train_dict['feature_sizes'], quantization_aware=True, pars=pars)
     quantized_model.cuda()
-    quantized_model.qconfig = torch.quantization.get_default_qconfig()
+    quantized_model.qconfig = torch.quantization.get_default_qconfig('qnnpack')
+
     print(quantized_model.qconfig)
 
     torch.quantization.prepare(quantized_model, inplace=True)
