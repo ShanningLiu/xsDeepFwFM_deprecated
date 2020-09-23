@@ -1107,6 +1107,11 @@ class DeepFMs(torch.nn.Module):
         x_size = Xi.shape[0]
 
         s = time()
+        '''
+        with torch.autograd.profiler.profile() as prof:
+            loss, total_metric, prauc, rce = self.eval_by_batch(Xi, Xv, y, x_size)
+        print(prof.key_averages().table(sort_by="self_cpu_time_total"))
+        '''
         loss, total_metric, prauc, rce = self.eval_by_batch(Xi, Xv, y, x_size)
         elapsed = time() - s
 

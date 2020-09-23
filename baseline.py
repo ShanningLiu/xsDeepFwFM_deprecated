@@ -108,13 +108,6 @@ def cross_entropy(predictions, targets):
     return ce
 
 
-def get_binary_labels(chunk, className):
-    chunk['label'] = 0
-    chunk = chunk.assign(label=np.where(np.isnan(chunk[className]), chunk['label'], 1))
-    labels = chunk.pop('label')
-
-    return labels, chunk
-
 def get_labels(chunk, ignoreNone=False):
     chunk['label'] = 4
     chunk = chunk.assign(label=np.where(np.isnan(chunk['reply_engagement_timestamp']), chunk['label'], 0))
