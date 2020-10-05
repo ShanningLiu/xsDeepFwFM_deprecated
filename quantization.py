@@ -3,6 +3,7 @@ import argparse
 import sys
 
 import numpy as np
+from sklearn.metrics import accuracy_score
 
 from model import DeepFMs
 from utils import data_preprocess
@@ -16,21 +17,25 @@ pars = parser.parse_args()
 
 criteo_num_feat_dim = set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
 field_size = 39
-train_dict = data_preprocess.read_data('./data/large/train_criteo_s.csv', './data/large/criteo_feature_map_s',
+'''train_dict = data_preprocess.read_data('./data/large/train_criteo_s.csv', './data/large/criteo_feature_map_s',
+                                       criteo_num_feat_dim, feature_dim_start=1, dim=39)'''
+train_dict = data_preprocess.get_feature_sizes('./data/large/full_criteo_feature_map',
                                        criteo_num_feat_dim, feature_dim_start=1, dim=39)
-valid_dict = data_preprocess.read_data('./data/large/valid_criteo_s.csv', './data/large/criteo_feature_map_s',
+valid_dict = data_preprocess.read_data('./data/large/full_valid_criteo.csv', './data/large/full_criteo_feature_map',
                                        criteo_num_feat_dim, feature_dim_start=1, dim=39)
 
 if not pars.save_model_name:
     print("no model path given: -save_model_name")
     sys.exit()
 
-'''
+
+
 model = get_model(cuda=0, feature_sizes=train_dict['feature_sizes'], pars=pars)
-model = load_model_dic(model, pars.save_model_name)
+model = load_model_dic(model, pars.save_model_name, sparse=True)
 print('Original model:')
 f = model.print_size_of_model()
-model.time_model_evaluation(valid_dict['index'], valid_dict['value'], valid_dict['label'])'''
+test_batch = model.batch_size * 4
+model.time_model_evaluation(valid_dict['index'][:test_batch], valid_dict['value'][:test_batch], valid_dict['label'][:test_batch])
 
 # quantization (no CUDA allowed and dynamic after training)
 # https://pytorch.org/tutorials/recipes/recipes/dynamic_quantization.html
@@ -41,16 +46,14 @@ if pars.dynamic_quantization:
     quantized_model = load_model_dic(get_model(cuda=0, feature_sizes=train_dict['feature_sizes'], dynamic_quantization=True, pars=pars), pars.save_model_name)
 
     quantized_model.eval()
-    quantized_model = torch.quantization.quantize_dynamic(quantized_model, {torch.nn.Linear}, dtype=torch.qint8) # TODO float16 for better loss and acc; if available torch.nn.Embedding, torch.nn.Dropout and
+    quantized_model = torch.quantization.quantize_dynamic(quantized_model, {torch.nn.Linear}, dtype=torch.qint8)
 
-    #print(torch.dequantize(quantized_model.field_cov.weight()))
-    #print(quantized_model)
     print("Dynamic Quantization model:")
     q = quantized_model.print_size_of_model()
     #print("\t{0:.2f} times smaller".format(f / q))
+    #print(quantized_model)
 
-    quantized_model.eval()
-    quantized_model.time_model_evaluation(valid_dict['index'], valid_dict['value'], valid_dict['label'])
+    quantized_model.time_model_evaluation(valid_dict['index'][:test_batch], valid_dict['value'][:test_batch], valid_dict['label'][:test_batch])
 
     torch.save(quantized_model.state_dict(), pars.save_model_name + '_dynamic_quant')
 
@@ -59,9 +62,7 @@ if pars.static_quantization:  # https://pytorch.org/tutorials/advanced/static_qu
     quantized_model = load_model_dic(get_model(cuda=0, feature_sizes=train_dict['feature_sizes'], static_quantization=True, use_deep=pars.use_deep, pars=pars), pars.save_model_name)
     quantized_model.eval()
 
-    quantized_model.qconfig = torch.quantization.get_default_qconfig('qnnpack') # 'fbgemm' works bad?
-    torch.backends.quantized.engine = 'fbgemm'
-    print(quantized_model.qconfig)
+    quantized_model.qconfig = torch.quantization.get_default_qconfig('fbgemm')
     torch.quantization.prepare(quantized_model, inplace=True)
 
     #print(quantized_model)
@@ -69,9 +70,9 @@ if pars.static_quantization:  # https://pytorch.org/tutorials/advanced/static_qu
     # Calibrate
     quantized_model.static_calibrate = True
     calibration_size = quantized_model.batch_size * 10
-    Xi = train_dict['index'][:calibration_size]
-    Xv = train_dict['value'][:calibration_size]
-    y = train_dict['label'][:calibration_size]
+    Xi = valid_dict['index'][:calibration_size]
+    Xv = valid_dict['value'][:calibration_size]
+    y = valid_dict['label'][:calibration_size]
     Xi = np.array(Xi).reshape((-1, quantized_model.field_size - quantized_model.num, 1))
     Xv = np.array(Xv)
     y = np.array(y)
@@ -83,20 +84,21 @@ if pars.static_quantization:  # https://pytorch.org/tutorials/advanced/static_qu
     # Convert to quantized model
     quantized_model.static_calibrate = False
     torch.quantization.convert(quantized_model, inplace=True)
-    print(quantized_model)
+    #print(quantized_model)
     print("Post Static Quantization model:")
     q = quantized_model.print_size_of_model()
     #print("\t{0:.2f} times smaller".format(f / q))
 
-    quantized_model.time_model_evaluation(valid_dict['index'], valid_dict['value'], valid_dict['label'])
+    quantized_model.time_model_evaluation(valid_dict['index'][:test_batch], valid_dict['value'][:test_batch], valid_dict['label'][:test_batch])
 
     torch.save(quantized_model.state_dict(), pars.save_model_name + '_static_quant')
 
 # QAT supports CUDA with fake quantization: https://pytorch.org/docs/stable/quantization.html
+# convertion happens in evaluation method
 if pars.quantization_aware: 
     quantized_model = get_model(cuda=1, feature_sizes=train_dict['feature_sizes'], quantization_aware=True, pars=pars)
     quantized_model.cuda()
-    quantized_model.qconfig = torch.quantization.get_default_qconfig('qnnpack')
+    quantized_model.qconfig = torch.quantization.get_default_qat_qconfig('fbgemm')
 
     print(quantized_model.qconfig)
 
@@ -110,10 +112,6 @@ if pars.quantization_aware:
     torch.save(quantized_model.state_dict(), pars.save_model_name + '_quant_aware')
 
     print("Quantization Aware model:")
-    #quantized_model = get_model(cuda=0, feature_sizes=train_dict['feature_sizes'], pars=pars)
-    #quantized_model.qconfig = torch.quantization.get_default_qconfig()
-    #torch.quantization.prepare(quantized_model, inplace=True)
-
     state_dict = torch.load(pars.save_model_name + '_quant_aware')
     quantized_model.load_state_dict(state_dict)
     quantized_model.to('cpu')
@@ -124,4 +122,4 @@ if pars.quantization_aware:
 
     q = quantized_model.print_size_of_model()
     #print("\t{0:.2f} times smaller".format(f / q))
-    quantized_model.time_model_evaluation(valid_dict['index'], valid_dict['value'], valid_dict['label'], cuda=False)
+    quantized_model.time_model_evaluation(valid_dict['index'][:test_batch], valid_dict['value'][:test_batch], valid_dict['label'][:test_batch], cuda=False)

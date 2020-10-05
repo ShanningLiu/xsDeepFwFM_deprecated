@@ -134,7 +134,6 @@ class DeepFMs(torch.nn.Module):
         self.md_flag = md_flag
         self.md_threshold = md_threshold
 
-
         np.random.seed(self.random_seed)
         random.seed(self.random_seed)
         torch.manual_seed(self.random_seed)
@@ -307,7 +306,10 @@ class DeepFMs(torch.nn.Module):
                 # convert a list of tensors to tensor
                 fm_second_order_tensor = torch.stack(fm_2nd_emb_arr)
                 if self.use_fwlw:
-                    fwfm_linear = torch.einsum('ijk,ik->ijk', [fm_second_order_tensor, self.fwfm_linear.weight])
+                    if self.dynamic_quantization or (self.static_quantization and not self.static_calibrate) or (self.quantization_aware and not self.use_cuda):
+                        fwfm_linear = torch.einsum('ijk,ik->ijk', [fm_second_order_tensor, self.fwfm_linear.weight().dequantize()])
+                    else:
+                        fwfm_linear = torch.einsum('ijk,ik->ijk', [fm_second_order_tensor, self.fwfm_linear.weight])
                     fm_first_order = torch.einsum('ijk->ji', [fwfm_linear])
                     if self.is_shallow_dropout:
                         fm_first_order = self.fm_first_order_dropout(fm_first_order)
@@ -325,11 +327,11 @@ class DeepFMs(torch.nn.Module):
                         q_add = q_func.add(self.field_cov.weight().t(), self.field_cov.weight()) # without transpose better?
                         q_add_mul = q_func.mul_scalar(q_add, 0.5)
                         outer_fwfm = torch.einsum('klij,kl->klij', outer_fm, torch.dequantize(q_add_mul))'''
-                        # better for loss:
+                        ''''# better for loss:
                         if hasattr(self.field_cov, '_packed_params') and self.field_cov._packed_params.dtype == torch.float16:
                             outer_fwfm = torch.einsum('klij,kl->klij', outer_fm, (self.field_cov.weight().t() + self.field_cov.weight()) * 0.5)
-                        else:
-                            outer_fwfm = torch.einsum('klij,kl->klij', outer_fm, (self.field_cov.weight().dequantize().t() + self.field_cov.weight().dequantize()) * 0.5)
+                        else:'''
+                        outer_fwfm = torch.einsum('klij,kl->klij', outer_fm, (self.field_cov.weight().dequantize().t() + self.field_cov.weight().dequantize()) * 0.5)
 
                     # time cost 3%
                     else:
@@ -423,7 +425,11 @@ class DeepFMs(torch.nn.Module):
 
         # total_sum dim: batch, time cost 1.3%
         if (self.use_fm or self.use_fwfm) and self.use_lw:
-            fm_first_order = torch.matmul(fm_first_order, self.fm_1st.weight.t())
+            if self.dynamic_quantization or (self.static_quantization and not self.static_calibrate) or (
+                    self.quantization_aware and not self.use_cuda):
+                fm_first_order = torch.matmul(fm_first_order, self.fm_1st.weight().dequantize().t())
+            else:
+                fm_first_order = torch.matmul(fm_first_order, self.fm_1st.weight.t())
 
         elif self.use_ffm and self.lw:
             ffm_first_order = torch.matmul(ffm_first_order, self.ffm_1st.weight.t())
@@ -552,12 +558,18 @@ class DeepFMs(torch.nn.Module):
                 num_2nd_order_embeddings += np.prod(param.data.shape)
             if 'linear_' in name:
                 num_dnn += np.prod(param.data.shape)
+            if 'field_cov.weight' == name:
+                symm_sum = 0.5 * (param.data + param.data.t())
+                non_zero_r = (symm_sum != 0).sum().item()
         print('Summation of feature sizes: %s' % (sum(self.feature_sizes)))
         print('Number of 1st order embeddings: %d' % (num_1st_order_embeddings))
         print('Number of 2nd order embeddings: %d' % (num_2nd_order_embeddings))
+        print('Number of 2nd order interactions: %d' % (non_zero_r))
         print('Number of DNN parameters: %d' % (num_dnn))
         print("Number of total parameters: %d" % (num_total))
         print('========')
+        num_total_original = num_total
+
         n_iter = 0
         for epoch in range(self.n_epochs):
             total_loss = 0.0
@@ -612,6 +624,7 @@ class DeepFMs(torch.nn.Module):
                     batch_begin_time = time()
 
                 if prune and (i == batch_iter or i % 10 == 9) and epoch >= self.warm:
+                    # adaptive increases faster in the early phase when the network is stable and slower in the late phase when the network becomes sensitive
                     self.adaptive_sparse = self.target_sparse * (1 - 0.99 ** (n_iter / 100.))
                     if prune_fm != 0:
                         stacked_embeddings = []
@@ -686,255 +699,31 @@ class DeepFMs(torch.nn.Module):
                     # Freeze batch norm mean and variance estimates
                     self.apply(torch.nn.intrinsic.qat.freeze_bn_stats)
 
-        # summary
-        num_total = 0
-        num_1st_order_embeddings = 0
-        num_2nd_order_embeddings = 0
-        num_dnn = 0
-        non_zero_r = 0
-        print('========')
-        for name, param in model.named_parameters():
-            num_total += (param != 0).sum().item()
-            if '1st_embeddings' in name:
-                num_1st_order_embeddings += (param != 0).sum().item()
-            if '2nd_embeddings' in name:
-                num_2nd_order_embeddings += (param != 0).sum().item()
-            if 'linear_' in name:
-                num_dnn += (param != 0).sum().item()
-            if 'field_cov.weight' == name:
-                symm_sum = 0.5 * (param.data + param.data.t())
-                non_zero_r = (symm_sum != 0).sum().item()
-        print('Number of pruned 1st order embeddings: %d' % (num_1st_order_embeddings))
-        print('Number of pruned 2nd order embeddings: %d' % (num_2nd_order_embeddings))
-        print('Number of pruned 2nd order interactions: %d' % (non_zero_r))
-        print('Number of pruned DNN parameters: %d' % (num_dnn))
-        print("Number of pruned total parameters: %d" % (num_total))
-
-    def fit_generator(self, training_generator, valid_generator=None, early_stopping=False, refit=False, save_path=None,
-                      prune=0, prune_fm=0, prune_r=0,
-                      prune_deep=0, emb_r=1., emb_corr=1.):
-
-        if save_path and not os.path.exists('/'.join(save_path.split('/')[0:-1])):
-            print("Save path does not exist!")
-            return
-
-        is_valid = False
-        if valid_generator:
-            is_valid = True
-
-        print('init_weights')
-        self.init_weights()
-
-        """
-            train model
-        """
-        model = self.train()
-
-        optimizer = torch.optim.SGD(self.parameters(), lr=self.learning_rate, momentum=self.momentum,
-                                    weight_decay=self.weight_decay)
-        if self.optimizer_type == 'adam':
-            optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
-        elif self.optimizer_type == 'rmsp':
-            optimizer = torch.optim.RMSprop(self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
-        elif self.optimizer_type == 'adag':
-            optimizer = torch.optim.Adagrad(self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
-        criterion = F.binary_cross_entropy_with_logits
-
-        train_result = []
-        valid_result = []
-        num_total = 0
-        num_1st_order_embeddings = 0
-        num_2nd_order_embeddings = 0
-        num_dnn = 0
-        print('========')
-        for name, param in model.named_parameters():
-            if self.verbose:
-                print(name, param.data.shape)
-            num_total += np.prod(param.data.shape)
-            if '1st_embeddings' in name:
-                num_1st_order_embeddings += np.prod(param.data.shape)
-            if '2nd_embeddings' in name:
-                num_2nd_order_embeddings += np.prod(param.data.shape)
-            if 'linear_' in name:
-                num_dnn += np.prod(param.data.shape)
-        print('Summation of feature sizes: %s' % (sum(self.feature_sizes)))
-        print('Number of 1st order embeddings: %d' % (num_1st_order_embeddings))
-        print('Number of 2nd order embeddings: %d' % (num_2nd_order_embeddings))
-        print('Number of DNN parameters: %d' % (num_dnn))
-        print("Number of total parameters: %d" % (num_total))
-        print('========')
-        n_iter = 0
-        for epoch in range(self.n_epochs):
-            total_loss = 0.0
-            batch_iter = len(training_generator.dataset) // self.batch_size
-            epoch_begin_time = time()
-            batch_begin_time = time()
-            for batch_idx, (batch_xi, batch_xv, batch_y) in enumerate(training_generator):
-                if self.use_cuda:
-                    batch_xi, batch_xv, batch_y = batch_xi.cuda(), batch_xv.cuda(), batch_y.cuda()
-                optimizer.zero_grad()
-                outputs = model(batch_xi, batch_xv)
-                loss = criterion(outputs, batch_y)
-                loss.backward()
-                optimizer.step()
-
-                total_loss += loss.data.item()
-                if self.verbose and batch_idx % 100 == 99:
-                    eval = self.evaluate(batch_xi, batch_xv, batch_y)
-                    print('[%d, %5d/%5d] loss: %.6f metric: %.6f time: %.1f s' %
-                          (epoch + 1, batch_idx + 1, len(training_generator), total_loss / 100.0, eval,
-                           time() - batch_begin_time))
-                    total_loss = 0.0
-                    batch_begin_time = time()
-
-                if prune and (batch_idx == batch_iter or batch_idx % 10 == 9) and epoch >= self.warm:
-                    self.adaptive_sparse = self.target_sparse * (1 - 0.99 ** (n_iter / 100.))
-                    if prune_fm != 0:
-                        stacked_embeddings = []
-                        for name, param in model.named_parameters():
-                            if 'fm_2nd_embeddings' in name:
-                                stacked_embeddings.append(param.data)
-                        stacked_emb = torch.cat(stacked_embeddings, 0)
-                        emb_threshold = self.binary_search_threshold(stacked_emb.data, self.adaptive_sparse * emb_r,
-                                                                     np.prod(stacked_emb.data.shape))
-                    for name, param in model.named_parameters():
-                        if 'fm_2nd_embeddings' in name and prune_fm != 0:
-                            mask = abs(param.data) < emb_threshold
-                            param.data[mask] = 0
-                        if 'linear' in name and 'weight' in name and prune_deep != 0:
-                            layer_pars = np.prod(param.data.shape)
-                            threshold = self.binary_search_threshold(param.data, self.adaptive_sparse, layer_pars)
-                            mask = abs(param.data) < threshold
-                            param.data[mask] = 0
-                        if 'field_cov.weight' == name and prune_r != 0:
-                            layer_pars = np.prod(param.data.shape)
-                            symm_sum = 0.5 * (param.data + param.data.t())
-                            threshold = self.binary_search_threshold(symm_sum, self.adaptive_sparse * emb_corr,
-                                                                     layer_pars)
-                            mask = abs(symm_sum) < threshold
-                            param.data[mask] = 0
-                            # print (mask.sum().item(), layer_pars)
-
-            # epoch evaluation metrics
-            no_non_sparse = 0
+        if prune: # summary
+            num_total = 0
+            num_1st_order_embeddings = 0
+            num_2nd_order_embeddings = 0
+            num_dnn = 0
+            non_zero_r = 0
+            print('========')
             for name, param in model.named_parameters():
-                no_non_sparse += (param != 0).sum().item()
-            print('Model parameters %d, sparse rate %.2f%%' % (no_non_sparse, 100 - no_non_sparse * 100. / num_total))
-            train_loss, train_eval, train_prauc, train_rce = self.eval_by_generator(training_generator)
-            train_result.append(train_eval)
-            print('Training [%d] loss: %.6f metric: %.6f prauc: %.4f rce: %.2f sparse %.2f%% time: %.1f s' %
-                  (
-                      epoch + 1, train_loss, train_eval, train_prauc, train_rce, 100 - no_non_sparse * 100. / num_total,
-                      time() - epoch_begin_time))
-            if is_valid:
-                valid_loss, valid_eval, vaild_prauc, valid_rce = self.eval_by_generator(valid_generator)
-                valid_result.append(valid_eval)
-                print('Validation [%d] loss: %.6f metric: %.6f prauc: %.4f rce: %.2f sparse %.2f%% time: %.1f s' %
-                      (
-                          epoch + 1, valid_loss, valid_eval, vaild_prauc, valid_rce,
-                          100 - no_non_sparse * 100. / num_total,
-                          time() - epoch_begin_time))
-            print('*' * 50)
-
-            if save_path:
-                torch.save(self.state_dict(), save_path)
-            if is_valid and early_stopping and self.training_termination(valid_result):
-                print("early stop at [%d] epoch!" % (epoch + 1))
-                break
-
-        # summary
-        num_total = 0
-        num_1st_order_embeddings = 0
-        num_2nd_order_embeddings = 0
-        num_dnn = 0
-        non_zero_r = 0
-        print('========')
-        for name, param in model.named_parameters():
-            num_total += (param != 0).sum().item()
-            if '1st_embeddings' in name:
-                num_1st_order_embeddings += (param != 0).sum().item()
-            if '2nd_embeddings' in name:
-                num_2nd_order_embeddings += (param != 0).sum().item()
-            if 'linear_' in name:
-                num_dnn += (param != 0).sum().item()
-            if 'field_cov.weight' == name:
-                symm_sum = 0.5 * (param.data + param.data.t())
-                non_zero_r = (symm_sum != 0).sum().item()
-        print('Number of pruned 1st order embeddings: %d' % (num_1st_order_embeddings))
-        print('Number of pruned 2nd order embeddings: %d' % (num_2nd_order_embeddings))
-        print('Number of pruned 2nd order interactions: %d' % (non_zero_r))
-        print('Number of pruned DNN parameters: %d' % (num_dnn))
-        print("Number of pruned total parameters: %d" % (num_total))
-        '''
-        # fit a few more epoch on train+valid until result reaches the best_train_score
-        if is_valid and refit:
-            if self.verbose:
-                print("refitting the model")
-            if self.greater_is_better:
-                best_epoch = np.argmax(valid_result)
-            else:
-                best_epoch = np.argmin(valid_result)
-            best_train_score = train_result[best_epoch]
-            Xi_train = np.concatenate((Xi_train,Xi_valid))
-            Xv_train = np.concatenate((Xv_train,Xv_valid))
-            y_train = np.concatenate((y_train,y_valid))
-            x_size = x_size + x_valid_size
-            self.shuffle_in_unison_scary(Xi_train,Xv_train,y_train)
-            for epoch in range(64):
-                batch_iter = x_size // self.batch_size
-                for i in range(batch_iter + 1):
-                    offset = i * self.batch_size
-                    end = min(x_size, offset + self.batch_size)
-                    if offset == end:
-                        break
-                    batch_xi = Variable(torch.LongTensor(Xi_train[offset:end]))
-                    batch_xv = Variable(torch.FloatTensor(Xv_train[offset:end]))
-                    batch_y = Variable(torch.FloatTensor(y_train[offset:end]))
-                    if self.use_cuda:
-                        batch_xi, batch_xv, batch_y = batch_xi.cuda(), batch_xv.cuda(), batch_y.cuda()
-                    optimizer.zero_grad()
-                    outputs = model(batch_xi, batch_xv)
-                    loss = criterion(outputs, batch_y)
-                    loss.backward()
-                    optimizer.step()
-                train_loss, train_eval = self.eval_by_batch(Xi_train, Xv_train, y_train, x_size)
-                if save_path:
-                    torch.save(self.state_dict(), save_path)
-                if abs(best_train_score-train_eval) < 0.001 or \
-                        (self.greater_is_better and train_eval > best_train_score) or \
-                        ((not self.greater_is_better) and train_result < best_train_score):
-                    break
-            if self.verbose:
-                print("refit finished")
-        '''
-
-    def eval_by_generator(self, generator):
-        print("eval by generator...")
-        total_loss = 0.0
-        y = []
-        y_pred = []
-        x_size = len(generator.dataset)
-
-        criterion = F.binary_cross_entropy_with_logits
-        model = self.eval()
-        for i, (batch_xi, batch_xv, batch_y) in enumerate(generator):
-            offset = i * self.batch_size
-            end = min(x_size, offset + self.batch_size)
-            if offset == end:
-                break
-            if self.use_cuda:
-                batch_xi, batch_xv, batch_y = batch_xi.cuda(), batch_xv.cuda(), batch_y.cuda()
-            outputs = model(batch_xi, batch_xv)
-            pred = torch.sigmoid(outputs).cpu()
-            y.extend(batch_y.tolist())
-            y_pred.extend(pred.data.numpy().astype("float64"))
-            loss = criterion(outputs, batch_y)
-            total_loss += loss.data.item() * (end - offset)
-
-        total_metric = self.eval_metric(y, y_pred)
-        prauc = self.compute_prauc(y_pred, y)
-        rce = self.compute_rce(y_pred, y)
-        return total_loss / x_size, total_metric, prauc, rce
+                num_total += (param != 0).sum().item()
+                if '1st_embeddings' in name:
+                    num_1st_order_embeddings += (param != 0).sum().item()
+                if '2nd_embeddings' in name:
+                    num_2nd_order_embeddings += (param != 0).sum().item()
+                if 'linear_' in name:
+                    num_dnn += (param != 0).sum().item()
+                if 'field_cov.weight' == name:
+                    symm_sum = 0.5 * (param.data + param.data.t())
+                    non_zero_r = (symm_sum != 0).sum().item()
+            print('Number of pruned 1st order embeddings: %d' % (num_1st_order_embeddings))
+            print('Number of pruned 2nd order embeddings: %d' % (num_2nd_order_embeddings))
+            print('Number of pruned 2nd order interactions: %d' % (non_zero_r))
+            print('Number of pruned DNN parameters: %d' % (num_dnn))
+            print("Number of pruned total parameters: %d" % (num_total))
+            print("Non pruned model parameters: \t%d" % (num_total_original))
+            print("Difference: \t%d" % (num_total_original-num_total))
 
     def eval_by_batch(self, Xi, Xv, y, x_size):
         if self.quantization_aware:
@@ -1106,12 +895,10 @@ class DeepFMs(torch.nn.Module):
         y = np.array(y)
         x_size = Xi.shape[0]
 
+        #with torch.autograd.profiler.profile() as prof:
+            #loss, total_metric, prauc, rce = self.eval_by_batch(Xi, Xv, y, x_size)
+        #print(prof.key_averages().table(sort_by="self_cpu_time_total"))
         s = time()
-        '''
-        with torch.autograd.profiler.profile() as prof:
-            loss, total_metric, prauc, rce = self.eval_by_batch(Xi, Xv, y, x_size)
-        print(prof.key_averages().table(sort_by="self_cpu_time_total"))
-        '''
         loss, total_metric, prauc, rce = self.eval_by_batch(Xi, Xv, y, x_size)
         elapsed = time() - s
 

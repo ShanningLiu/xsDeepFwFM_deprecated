@@ -141,8 +141,8 @@ float Dense_DNN(int y, float output, vector<int> & Xi, vector<vector<vector<floa
     return log(1 + exp(-y * sum));
 }
 
-float Sparse_DNN(int y, float output, vector<int> & Xi, vector<vector<vector<float>>> & quadratic, vector<SparseMatrix<float>> & slinear_weights, \
-		SparseMatrix<float> & slinear_1_weight, vector<vector<float>> & bias, vector<vector<float>> & neurons) {
+float Sparse_DNN(int y, float output, vector<int> & Xi, vector<vector<vector<float>>> & quadratic, vector<SparseMatrix::SparseMatrix<float>> & slinear_weights, \
+		SparseMatrix::SparseMatrix<float> & slinear_1_weight, vector<vector<float>> & bias, vector<vector<float>> & neurons) {
     float sum = output;
     vector<float> embedding_combined_vector;
     for (int f = 0; f < FIELD; f++) {
@@ -170,8 +170,8 @@ float Sparse_DNN(int y, float output, vector<int> & Xi, vector<vector<vector<flo
 }
 
 /* Initialize the weight in the sparse DNN component */
-SparseMatrix<float> init_sparse_mat(int m, int n, float ratio) {
-    SparseMatrix<float> mat(m, n);
+SparseMatrix::SparseMatrix<float> init_sparse_mat(int m, int n, float ratio) {
+    SparseMatrix::SparseMatrix<float> mat(m, n);
     int nonzeros = ratio * m * n;
     int rand_i, rand_j;
     float rand_v;
@@ -211,7 +211,7 @@ void init_FM(vector<vector<float>>&linear, vector<vector<vector<float>>>& quadra
     }
 }
 
-void init_sparse_deep(SparseMatrix<float> & slinear_1_weight, vector<SparseMatrix<float>> & slinear_weights, float ratio) {
+void init_sparse_deep(SparseMatrix::SparseMatrix<float> & slinear_1_weight, vector<SparseMatrix::SparseMatrix<float>> & slinear_weights, float ratio) {
     slinear_1_weight = init_sparse_mat(NODES, EMBEDDING * FIELD, ratio);
     slinear_weights.clear();
     for (int l = 1; l < LAYERS; l++) {
@@ -225,7 +225,7 @@ double cnt_time(MYTIME start, MYTIME end) {
 }
 
 int main() {
-    SparseMatrix<float> mat = init_sparse_mat(NODES, NODES, 0.01);
+    SparseMatrix::SparseMatrix<float> mat = init_sparse_mat(NODES, NODES, 0.01);
     vector<float> vec(NODES, 2);
     // A prediction sample
     vector<int> Xi{0,0,0,0,0,0,0,0,0,0,0,0,0,10,10,10,10,10,10,10,10,3,10,10,10,10,10,10,10,5,10,10,4,10,10,10,100,10,10};
@@ -244,8 +244,8 @@ int main() {
     vector<vector<float>> neurons(LAYERS, vector<float>(NODES, 0));
     vector<vector<float>> bias(LAYERS + 1, vector<float>(NODES, 0.31));
     // Initialize sparse DNN weights
-    SparseMatrix<float> slinear_1_weight(NODES, FIELD * EMBEDDING);
-    vector<SparseMatrix<float>> slinear_weights;
+    SparseMatrix::SparseMatrix<float> slinear_1_weight(NODES, FIELD * EMBEDDING);
+    vector<SparseMatrix::SparseMatrix<float>> slinear_weights;
 
     // Logistic regression
     auto start = std::chrono::high_resolution_clock::now();

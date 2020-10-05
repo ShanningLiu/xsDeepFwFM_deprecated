@@ -21,7 +21,7 @@ if __name__ == '__main__':
     torch.cuda.manual_seed(pars.random_seed)
 
     save_model_name = './saved_models/' + pars.c + '_l2_' + str(pars.l2) + '_sparse_' + str(
-        pars.sparse) + '_seed_' + str(pars.random_seed)
+        pars.sparse) + '_seed_' + str(pars.random_seed) + '_non_pruned'
 
     if pars.qr_flag:
         save_model_name = save_model_name + '_qr'
@@ -57,13 +57,14 @@ if __name__ == '__main__':
         torch.cuda.empty_cache()
         model = model.cuda()
 
-    print(model)
+    #print(model)
 
     model.fit(train_dict['index'], train_dict['value'], train_dict['label'], valid_dict['index'],
               valid_dict['value'], valid_dict['label'],
               prune=pars.prune, prune_fm=pars.prune_fm, prune_r=pars.prune_r, prune_deep=pars.prune_deep,
-              save_path=save_model_name, emb_r=pars.emb_r, emb_corr=pars.emb_corr)
+              save_path=save_model_name, emb_r=pars.emb_r, emb_corr=pars.emb_corr, early_stopping=False)
 
+    #print(model)
     # measurement
     time_on_cuda = False
     model = get_model(cuda=time_on_cuda, feature_sizes=train_dict['feature_sizes'], use_deep=pars.use_deep, pars=pars)

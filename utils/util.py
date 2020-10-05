@@ -1,9 +1,15 @@
 import torch
 from model import DeepFMs
 
-def load_model_dic(model, model_file):
+def load_model_dic(model, model_file, sparse=False):
     state_dict = torch.load(model_file)
-    model.load_state_dict(state_dict)
+    if sparse:
+        model.load_state_dict(state_dict, strict=False)
+        for name, param in model.named_parameters():
+            if 'linear' in name and 'weight' in name:
+                param.to_sparse()
+    else:
+        model.load_state_dict(state_dict)
     #model.to('cpu')
     return model
 
