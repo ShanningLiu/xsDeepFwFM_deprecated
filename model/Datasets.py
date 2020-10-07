@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+from utils import data_preprocess
 
 class Dataset(torch.utils.data.Dataset):
     def __init__(self, X_index, X_value, labels, size):
@@ -16,3 +17,36 @@ class Dataset(torch.utils.data.Dataset):
         y = torch.tensor(self.labels[index]).float()
 
         return Xi_i, Xv_i, y
+
+
+def get_dataset(pars):
+    criteo_num_feat_dim = set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
+    twitter_num_feat_dim = set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
+
+    if pars.dataset == 'tiny-criteo':
+        field_size = 39
+        train_dict = data_preprocess.read_data('./data/tiny_train_input.csv', './data/category_emb',
+                                               criteo_num_feat_dim,
+                                               feature_dim_start=0, dim=39)
+        valid_dict = data_preprocess.read_data('./data/tiny_test_input.csv', './data/category_emb', criteo_num_feat_dim,
+                                               feature_dim_start=0, dim=39)
+    elif pars.dataset == 'twitter':
+        field_size = 20
+        pars.numerical = 15
+        train_dict = data_preprocess.read_data('./data/large/train_twitter_s.csv', './data/large/twitter_feature_map_s',
+                                               twitter_num_feat_dim, feature_dim_start=1, dim=20)
+        valid_dict = data_preprocess.read_data('./data/large/valid_twitter_s.csv', './data/large/twitter_feature_map_s',
+                                               twitter_num_feat_dim, feature_dim_start=1, dim=20)
+    else:  # criteo dataset
+        field_size = 39
+        train_dict = data_preprocess.read_data('./data/large/train_criteo_s.csv', './data/large/criteo_feature_map_s',
+                                               criteo_num_feat_dim, feature_dim_start=1, dim=39)
+        valid_dict = data_preprocess.read_data('./data/large/valid_criteo_s.csv', './data/large/criteo_feature_map_s',
+                                               criteo_num_feat_dim, feature_dim_start=1, dim=39)
+        '''train_dict = data_preprocess.get_feature_sizes('./data/large/full_criteo_feature_map',
+                                                       criteo_num_feat_dim, feature_dim_start=1, dim=39)
+        valid_dict = data_preprocess.read_data('./data/large/full_valid_criteo.csv',
+                                               './data/large/full_criteo_feature_map',
+                                               criteo_num_feat_dim, feature_dim_start=1, dim=39)'''
+
+    return field_size, train_dict, valid_dict

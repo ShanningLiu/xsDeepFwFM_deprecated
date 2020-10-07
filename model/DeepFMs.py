@@ -887,7 +887,7 @@ class DeepFMs(torch.nn.Module):
         os.remove('temp.p')
         return size
 
-    def time_model_evaluation(self, Xi, Xv, y, cuda=False, quantization_aware=False):
+    def run_benchmark(self, Xi, Xv, y, cuda=False, quantization_aware=False):
         torch.set_num_threads(1)
 
         Xi = np.array(Xi).reshape((-1, self.field_size - self.num, 1))
@@ -895,41 +895,40 @@ class DeepFMs(torch.nn.Module):
         y = np.array(y)
         x_size = Xi.shape[0]
 
+        loss, total_metric, prauc, rce = self.eval_by_batch(Xi, Xv, y, x_size)
+        print('\tLoss: ', loss)
+        print('\tMetric: ', total_metric)
+
         #with torch.autograd.profiler.profile() as prof:
             #loss, total_metric, prauc, rce = self.eval_by_batch(Xi, Xv, y, x_size)
         #print(prof.key_averages().table(sort_by="self_cpu_time_total"))
-        s = time()
-        loss, total_metric, prauc, rce = self.eval_by_batch(Xi, Xv, y, x_size)
-        elapsed = time() - s
 
-        print('''\tLoss: {0:.3f}\n\tAcc: {1:.3f}\n\tElapsed time (seconds): {2:.3f}'''.format(loss, total_metric, elapsed))
-
-        Xi_1 = torch.LongTensor([Xi[0]])
-        Xv_1 = torch.FloatTensor([Xv[0]])
-        if cuda:
-            Xi_1 = Xi_1.cuda()
-            Xv_1 = Xv_1.cuda()
-
-        if self.quantization_aware:
-            model = self.to('cpu')
+        model = self.to('cpu')
+        if quantization_aware:
             model.use_cuda = False
             model = torch.quantization.convert(model.eval(), inplace=False)
             model.eval()
         else:
-            model = self.eval()
+            model.eval()
 
-        i = 0
+        batch_size = 8192
+        batch_iter = x_size // batch_size
         time_spent = []
-        while i < 500:
-            start_time = time()
+        for i in range(batch_iter + 1):
+            offset = i * batch_size
+            end_offset = min(x_size, offset + batch_size)
+            batch_xi = Variable(torch.LongTensor(Xi[offset:end_offset]))
+            batch_xv = Variable(torch.FloatTensor(Xv[offset:end_offset]))
+
+            start = time()
             with torch.no_grad():
-                _ = model(Xi_1, Xv_1)
+                outputs = model(batch_xi, batch_xv)
             if cuda:
-                torch.cuda.synchronize()  # wait for cuda to finish (cuda is asynchronous!)
-            if i != 0:
-                time_spent.append(time() - start_time)
-            i += 1
-        print('\tAvg execution time per forward(ms): {:.5f}'.format(np.mean(time_spent)))
+                torch.cuda.synchronize()
+            end = time()
+            time_spent.append(end - start)
+
+        print('\tAvg execution time per forward (s): {:.5f}'.format(np.mean(time_spent)))
 
     def fetch_teacher_outputs(self, teacher_model, Xi, Xv, x_size):
         teacher_model.eval()

@@ -58,11 +58,11 @@ if __name__ == '__main__':
     model = get_model(cuda=0, feature_sizes=train_dict['feature_sizes'], pars=pars)
     model = load_model_dic(model, pars.save_model_name)
     f = model.print_size_of_model()
-    model.time_model_evaluation(valid_dict['index'], valid_dict['value'], valid_dict['label'])
+    model.run_benchmark(valid_dict['index'], valid_dict['value'], valid_dict['label'])
 
     print('Student model:')
     student = get_model(cuda=0, feature_sizes=train_dict['feature_sizes'], deep_nodes=number_of_deep_nodes, h_depth=h_depth, use_deep=False, pars=pars)
     student = load_model_dic(student, pars.save_model_name + '_kd')
     s = student.print_size_of_model()
     print("\t{0:.2f} times smaller".format(f / s))
-    student.time_model_evaluation(valid_dict['index'], valid_dict['value'], valid_dict['label'])
+    student.run_benchmark(valid_dict['index'], valid_dict['value'], valid_dict['label'])

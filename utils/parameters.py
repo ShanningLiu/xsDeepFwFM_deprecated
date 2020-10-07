@@ -42,7 +42,7 @@ def getParser():
     parser.add_argument('-embedding_bag', default=0, type=int, help='Use embedding bag')
     parser.add_argument('-qr_flag', default=0, type=int)
     parser.add_argument('-qr_operation', default="mult", type=str)
-    parser.add_argument('-qr_collisions', default=1, type=int)
+    parser.add_argument('-qr_collisions', default=4, type=int)
     parser.add_argument('-qr_threshold', default=200, type=int)
     parser.add_argument('-md_flag', default=0, type=int)
     parser.add_argument('-md_threshold', default=200, type=int)

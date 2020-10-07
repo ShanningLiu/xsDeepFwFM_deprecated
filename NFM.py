@@ -279,7 +279,7 @@ class NFM(torch.nn.Module):
 
 
     def fit(self, Xi_train, Xv_train, y_train, Xi_valid=None, Xv_valid=None,
-                y_valid = None, ealry_stopping=False, refit=False, save_path = None):
+                y_valid = None, early_stopping=False, refit=False, save_path = None):
         """
         :param Xi_train: [[ind1_1, ind1_2, ...], [ind2_1, ind2_2, ...], ..., [indi_1, indi_2, ..., indi_j, ...], ...]
                         indi_j is the feature index of feature field j of sample i in the training set
@@ -290,7 +290,7 @@ class NFM(torch.nn.Module):
         :param Xi_valid: list of list of feature indices of each sample in the validation set
         :param Xv_valid: list of list of feature values of each sample in the validation set
         :param y_valid: label of each sample in the validation set
-        :param ealry_stopping: perform early stopping or not
+        :param early_stopping: perform early stopping or not
         :param refit: refit the model on the train+valid dataset or not
         :param save_path: the path to save the model
         :return:
@@ -386,7 +386,7 @@ class NFM(torch.nn.Module):
                       (epoch + 1, valid_loss, valid_eval,time()-epoch_begin_time))
             if save_path:
                 torch.save(self.state_dict(),save_path)
-            if is_valid and ealry_stopping and self.training_termination(valid_result):
+            if is_valid and early_stopping and self.training_termination(valid_result):
                 print("early stop at [%d] epoch!" % (epoch+1))
                 break
 

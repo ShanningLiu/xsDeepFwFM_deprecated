@@ -9,20 +9,14 @@ from model import DeepFMs
 from utils import data_preprocess
 from utils.parameters import getParser
 from utils.util import get_model, load_model_dic
+from model.Datasets import Dataset, get_dataset
 
 import torch
 
 parser = getParser()
 pars = parser.parse_args()
 
-criteo_num_feat_dim = set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
-field_size = 39
-'''train_dict = data_preprocess.read_data('./data/large/train_criteo_s.csv', './data/large/criteo_feature_map_s',
-                                       criteo_num_feat_dim, feature_dim_start=1, dim=39)'''
-train_dict = data_preprocess.get_feature_sizes('./data/large/full_criteo_feature_map',
-                                       criteo_num_feat_dim, feature_dim_start=1, dim=39)
-valid_dict = data_preprocess.read_data('./data/large/full_valid_criteo.csv', './data/large/full_criteo_feature_map',
-                                       criteo_num_feat_dim, feature_dim_start=1, dim=39)
+field_size, train_dict, valid_dict = get_dataset(pars)
 
 if not pars.save_model_name:
     print("no model path given: -save_model_name")
@@ -34,8 +28,8 @@ model = get_model(cuda=0, feature_sizes=train_dict['feature_sizes'], pars=pars)
 model = load_model_dic(model, pars.save_model_name, sparse=True)
 print('Original model:')
 f = model.print_size_of_model()
-test_batch = model.batch_size * 4
-model.time_model_evaluation(valid_dict['index'][:test_batch], valid_dict['value'][:test_batch], valid_dict['label'][:test_batch])
+test_batch = model.batch_size * 20
+model.run_benchmark(valid_dict['index'][:test_batch], valid_dict['value'][:test_batch], valid_dict['label'][:test_batch])
 
 # quantization (no CUDA allowed and dynamic after training)
 # https://pytorch.org/tutorials/recipes/recipes/dynamic_quantization.html
@@ -53,7 +47,7 @@ if pars.dynamic_quantization:
     #print("\t{0:.2f} times smaller".format(f / q))
     #print(quantized_model)
 
-    quantized_model.time_model_evaluation(valid_dict['index'][:test_batch], valid_dict['value'][:test_batch], valid_dict['label'][:test_batch])
+    quantized_model.run_benchmark(valid_dict['index'][:test_batch], valid_dict['value'][:test_batch], valid_dict['label'][:test_batch])
 
     torch.save(quantized_model.state_dict(), pars.save_model_name + '_dynamic_quant')
 
@@ -89,7 +83,7 @@ if pars.static_quantization:  # https://pytorch.org/tutorials/advanced/static_qu
     q = quantized_model.print_size_of_model()
     #print("\t{0:.2f} times smaller".format(f / q))
 
-    quantized_model.time_model_evaluation(valid_dict['index'][:test_batch], valid_dict['value'][:test_batch], valid_dict['label'][:test_batch])
+    quantized_model.run_benchmark(valid_dict['index'][:test_batch], valid_dict['value'][:test_batch], valid_dict['label'][:test_batch])
 
     torch.save(quantized_model.state_dict(), pars.save_model_name + '_static_quant')
 
@@ -122,4 +116,4 @@ if pars.quantization_aware:
 
     q = quantized_model.print_size_of_model()
     #print("\t{0:.2f} times smaller".format(f / q))
-    quantized_model.time_model_evaluation(valid_dict['index'][:test_batch], valid_dict['value'][:test_batch], valid_dict['label'][:test_batch], cuda=False)
+    quantized_model.run_benchmark(valid_dict['index'][:test_batch], valid_dict['value'][:test_batch], valid_dict['label'][:test_batch], cuda=False)
