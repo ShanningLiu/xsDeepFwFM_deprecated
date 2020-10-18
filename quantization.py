@@ -23,13 +23,14 @@ if not pars.save_model_name:
     sys.exit()
 
 
-
-model = get_model(cuda=0, feature_sizes=train_dict['feature_sizes'], pars=pars)
-model = load_model_dic(model, pars.save_model_name, sparse=True)
+model = get_model(cuda=pars.use_cuda, feature_sizes=train_dict['feature_sizes'], pars=pars)
+model = load_model_dic(model, pars.save_model_name, sparse=pars.prune)
+if pars.use_cuda:
+    model.cuda()
 print('Original model:')
 f = model.print_size_of_model()
 test_batch = model.batch_size * 20
-model.run_benchmark(valid_dict['index'][:test_batch], valid_dict['value'][:test_batch], valid_dict['label'][:test_batch])
+model.run_benchmark(valid_dict['index'][:test_batch], valid_dict['value'][:test_batch], valid_dict['label'][:test_batch], cuda=pars.use_cuda)
 
 # quantization (no CUDA allowed and dynamic after training)
 # https://pytorch.org/tutorials/recipes/recipes/dynamic_quantization.html
@@ -37,7 +38,7 @@ model.run_benchmark(valid_dict['index'][:test_batch], valid_dict['value'][:test_
 # This is used for situations where the model execution time is dominated by loading weights from memory rather than computing the matrix multiplications.
 # This is true for for LSTM and Transformer type models with small batch size.
 if pars.dynamic_quantization:
-    quantized_model = load_model_dic(get_model(cuda=0, feature_sizes=train_dict['feature_sizes'], dynamic_quantization=True, pars=pars), pars.save_model_name)
+    quantized_model = load_model_dic(get_model(cuda=0, feature_sizes=train_dict['feature_sizes'], dynamic_quantization=True, pars=pars), pars.save_model_name, sparse=pars.prune)
 
     quantized_model.eval()
     quantized_model = torch.quantization.quantize_dynamic(quantized_model, {torch.nn.Linear}, dtype=torch.qint8)
@@ -53,7 +54,7 @@ if pars.dynamic_quantization:
 
 # most commonly used form of quantization
 if pars.static_quantization:  # https://pytorch.org/tutorials/advanced/static_quantization_tutorial.html
-    quantized_model = load_model_dic(get_model(cuda=0, feature_sizes=train_dict['feature_sizes'], static_quantization=True, use_deep=pars.use_deep, pars=pars), pars.save_model_name)
+    quantized_model = load_model_dic(get_model(cuda=0, feature_sizes=train_dict['feature_sizes'], static_quantization=True, pars=pars), pars.save_model_name, sparse=pars.prune)
     quantized_model.eval()
 
     quantized_model.qconfig = torch.quantization.get_default_qconfig('fbgemm')

@@ -5,7 +5,10 @@ import numpy as np
 from bert_serving.client import BertClient
 from transformers import BertTokenizer
 
-filepath = 'G:\\training_s.tsv'
+input = 'G:\\training_final.tsv'
+output = 'G:\\training_final_bert.csv'
+
+open(output, 'w').close()
 
 def getBertEmbeddings(sentences, pretrained_weights='bert-base-multilingual-cased'):
     model_class, tokenizer_class, pretrained_weights = (ppb.BertModel, ppb.BertTokenizer, pretrained_weights)
@@ -48,7 +51,8 @@ def getBertEmbeddingsfromTokens(tokenized, pretrained_weights='bert-base-multili
     return vectors
 
 
-chunksize = 128
+chunksize = 512
+skip_chunks = 1650
 
 names = ['text_tokens', 'hashtags', 'tweet_id', 'present_media', 'present_links', 'present_domains', 'tweet_type',
          'language', 'timestamp',
@@ -58,32 +62,25 @@ names = ['text_tokens', 'hashtags', 'tweet_id', 'present_media', 'present_links'
          'engaging_account_creation_time',
          'engagee_follows_engager', 'reply_engagement_timestamp', 'retweet_engagement_timestamp',
          'retweet_with_comment_engagement_timestamp', 'like_engagement_timestamp']
-'''
-print(getBertEmbeddings(["First do it"])[0][0])
-print(getBertEmbeddingsfromTokens([[101, 12128, 10149, 10271, 102]])[0][0])
-print(getBertEmbeddingsfromTokens([[101, 10422, 10149, 10271, 102]])[0][0])
+bc = BertClient(ip='35.247.77.188', port=6666)
+#bc = BertClient()
 
+for enumerator, chunk in enumerate(pd.read_csv(input, sep='\x01', encoding='utf8', chunksize=chunksize, names=names)):
+    #if enumerator < skip_chunks:
+        #continue
 
-tz = BertTokenizer.from_pretrained("bert-base-multilingual-cased")
-sent = "First do it"
-print(tz.convert_tokens_to_ids(tz.tokenize(sent)))
-sent = "first do it"
-print(tz.convert_tokens_to_ids(tz.tokenize(sent)))'''
-
-bc = BertClient(ip='35.230.16.12', port=6666)
-print(bc.encode(['First do it'])[0][0])
-print(bc.encode([['101', '12128', '10149', '10271', '102']], is_tokenized=True)[0][0])
-print(bc.encode([['101', '10422', '10149', '10271', '102']], is_tokenized=True)[0][0])
-
-
-for enumerator, chunk in enumerate(pd.read_csv(filepath, sep='\x01', encoding='utf8', chunksize=chunksize, names=names)):
     text_tokens = chunk.text_tokens
     text_tokens = text_tokens.str.split('\t')
 
-    print(bc.encode(text_tokens.tolist(), is_tokenized=True)[0][0])
-    '''
-    tokens = text_tokens.apply(lambda x: np.asarray(x, dtype=np.int).tolist())
-    print(getBertEmbeddings(tokens)[0][0])
-    break'''
+    #print(bc.encode(text_tokens.tolist(), is_tokenized=True)[0][0])
+    features = bc.encode(text_tokens.tolist(), is_tokenized=True)
 
-bc.close()
+    #tokens = text_tokens.apply(lambda x: np.asarray(x, dtype=np.int).tolist())
+    #features = getBertEmbeddingsfromTokens([tokens.iloc[511]])
+    #print(features[0][0])
+
+    df = pd.DataFrame(features, columns=['bert_' + str(i) for i in range(0, features.shape[1])])
+    df.to_csv(output, sep=',', encoding='utf8', index=False, mode='a', header=False)
+    print(enumerator)
+
+#bc.close()

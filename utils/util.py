@@ -13,11 +13,11 @@ def load_model_dic(model, model_file, sparse=False):
     #model.to('cpu')
     return model
 
-def get_model(cuda, feature_sizes, pars, dynamic_quantization=False, static_quantization=False, quantization_aware=False, field_size=39, deep_nodes=400, h_depth=3, use_deep=True):
+def get_model(cuda, feature_sizes, pars, dynamic_quantization=False, static_quantization=False, quantization_aware=False, field_size=39, deep_nodes=400, h_depth=3):
     return DeepFMs.DeepFMs(field_size=field_size, feature_sizes=feature_sizes,
                            embedding_size=pars.embedding_size, n_epochs=pars.n_epochs,
                            verbose=False, use_cuda=cuda, use_fm=pars.use_fm, use_fwfm=pars.use_fwfm,
-                           use_ffm=pars.use_ffm, use_deep=use_deep,
+                           use_ffm=pars.use_ffm, use_deep=pars.use_deep,
                            batch_size=pars.batch_size, learning_rate=pars.learning_rate, weight_decay=pars.l2,
                            momentum=pars.momentum, sparse=pars.sparse, warm=pars.warm,
                            h_depth=h_depth, deep_nodes=deep_nodes, num_deeps=pars.num_deeps,

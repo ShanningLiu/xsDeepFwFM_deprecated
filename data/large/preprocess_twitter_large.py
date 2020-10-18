@@ -19,9 +19,7 @@ def random_split(inputs, output1, valid):
 # https://github.com/WayneDW/AutoInt/blob/master/Dataprocess/Criteo/scale.py
 # TODO? https://stackoverflow.com/questions/47732108/how-to-scale-dataframes-consistently-minmaxscaler-sklearn
 def scale(x):
-    if x == '':
-        return '0'
-    elif float(x) > 2:
+    if float(x) > 2:
         return str(int(math.log(float(x)) ** 2))  # log transformation to normalize numerical features
     else:
         return str(int(float(x)))
@@ -42,8 +40,12 @@ def cnt_freq_train(inputs):
             for feature, i in all_features_to_idx.items():
 
                 if feature in dense_features:
-                    if type(features[i]) is str:
+                    if type(features[i]) is str and not features[i].isdigit():
+                        # number of token
                         features[i] = len(features[i].split('\t')) - 1
+                    #if feature == 'tweet_timestamp':
+                    #    features[i] = str(int(math.sqrt(float(features[i]))))
+                    #else:
                     features[i] = scale(features[i])
 
                 if features[i] not in count_freq[i]:
@@ -71,9 +73,13 @@ def generate_feature_map_and_train_csv(inputs, train_csv, file_feature_map, freq
             for feature, i in all_features_to_idx.items():
                 # map numerical features
                 if feature in dense_features:
-                    if type(features[i]) is str:
+                    if type(features[i]) is str and not features[i].isdigit():
                         features[i] = len(features[i].split('\t')) - 1
+                    #if feature == 'tweet_timestamp':
+                     #   features[i] = str(int(math.sqrt(float(features[i]))))
+                    #else:
                     features[i] = scale(features[i])
+
                     output_line.append(features[i])
 
                 # handle categorical features
@@ -167,7 +173,7 @@ labels_to_idx = {"reply_engagement_timestamp": 20, "retweet_engagement_timestamp
                  "retweet_with_comment_engagement_timestamp": 22,
                  "like_engagement_timestamp": 23}
 
-file = 'C:\\Users\\AndreasPeintner\\Downloads\\training_ss.tsv'
+file = 'G:\\training_final.tsv'
 print('Split the original dataset into train and valid dataset.')
 random_split(file, 'train1.tsv', 'valid.tsv')
 
@@ -177,7 +183,7 @@ print("Count freq in train")
 freq_dict = cnt_freq_train(file)
 
 print('Generate the feature map and impute the training dataset.')
-feature_map = generate_feature_map_and_train_csv('train1.tsv', 'train_twitter_large.csv', 'twitter_large_feature_map',
+feature_map = generate_feature_map_and_train_csv('train1.tsv', 'train_twitter_large.csv', 'twitter_feature_map_large',
                                                  freq_dict, category,
                                                  threshold=4)
 print('Impute the valid dataset.')

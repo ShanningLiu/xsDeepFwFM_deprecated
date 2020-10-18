@@ -75,7 +75,7 @@ The default code gives 0.8123 AUC if apply 90% sparsity on the DNN component and
 
 ```bash
 python main_all.py -l2 6e-7 -n_epochs 10 -warm 2 -prune 1 -sparse 0.90  -prune_deep 1 -prune_fm 1 -prune_r 1 -use_fwlw 1 -emb_r 0.444 -emb_corr 1. > ./logs/deepfwfm_l2_6e_7_prune_all_and_r_warm_2_sparse_0.90_emb_r_0.444_emb_corr_1
-```
+```__
 
 ## Useful python scripts
 
@@ -92,6 +92,11 @@ python main_all.py -use_fm 0 -use_fwfm 1 -use_deep 1 -use_lw 1 -use_fwlw 1 -use_
 Quantization for sparse models
 ```bash
 python quantization.py -use_deep 1 -use_fwfm 1 -n_epochs 3 -prune 1 -sparse 0.90 -use_fwlw 1 -save_model_name ./saved_models/full_pruned_DeepFwFM_l2_6e-07_sparse_0.9_seed_0 -dynamic_quantization 0 -quantization_aware 0 -static_quantization 1
+```
+
+Quantization for QR Embeddings
+```bash
+python quantization.py -use_deep 1 -use_fwfm 1 -use_lw 1 -use_fwlw 1 -n_epochs 3 -save_model_name ./saved_models/full_DeepFwFM_l2_3e-07_qr -dynamic_quantization 0 -quantization_aware 0 -static_quantization 1 -embedding_bag 1 -qr_flag 1
 ```
 
 ## Preprocess full Twitter dataset

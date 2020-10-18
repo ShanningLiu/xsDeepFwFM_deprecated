@@ -737,6 +737,8 @@ class DeepFMs(torch.nn.Module):
         y_pred = []
         if self.use_ffm:
             batch_size = 8192 * 2
+        elif self.field_size > 50:
+            batch_size = self.batch_size
         else:
             batch_size = 8192
         batch_iter = x_size // batch_size
@@ -897,29 +899,34 @@ class DeepFMs(torch.nn.Module):
 
         loss, total_metric, prauc, rce = self.eval_by_batch(Xi, Xv, y, x_size)
         print('\tLoss: ', loss)
-        print('\tMetric: ', total_metric)
+        print('\tAcc: ', total_metric)
 
         #with torch.autograd.profiler.profile() as prof:
             #loss, total_metric, prauc, rce = self.eval_by_batch(Xi, Xv, y, x_size)
         #print(prof.key_averages().table(sort_by="self_cpu_time_total"))
 
-        model = self.to('cpu')
+        model = self
         if quantization_aware:
+            model = self.to('cpu')
             model.use_cuda = False
             model = torch.quantization.convert(model.eval(), inplace=False)
-            model.eval()
-        else:
-            model.eval()
+
+        model.eval()
+        if cuda:
+            model.cuda()
 
         batch_size = 8192
         batch_iter = x_size // batch_size
         time_spent = []
-        for i in range(batch_iter + 1):
+        for i in range(batch_iter):
             offset = i * batch_size
             end_offset = min(x_size, offset + batch_size)
+            if offset == end_offset:
+                break
             batch_xi = Variable(torch.LongTensor(Xi[offset:end_offset]))
             batch_xv = Variable(torch.FloatTensor(Xv[offset:end_offset]))
-
+            if cuda:
+                batch_xi, batch_xv = batch_xi.cuda(), batch_xv.cuda()
             start = time()
             with torch.no_grad():
                 outputs = model(batch_xi, batch_xv)

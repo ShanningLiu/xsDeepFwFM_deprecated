@@ -1,18 +1,20 @@
 import random
 import numpy as np
 import torch
-from distiller.quantization import PostTrainLinearQuantizer, LinearQuantMode
-from copy import deepcopy
 
 from model import DeepFMs
 from model.Datasets import Dataset, get_dataset
 from utils.parameters import getParser
 from utils.util import get_model, load_model_dic
 
+import os
+
 parser = getParser()
 pars = parser.parse_args()
 
 if __name__ == '__main__':
+    #os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+
     print(pars)
     np.random.seed(pars.random_seed)
     random.seed(pars.random_seed)
@@ -30,7 +32,7 @@ if __name__ == '__main__':
 
     field_size, train_dict, valid_dict = get_dataset(pars)
 
-    model = get_model(cuda=pars.use_cuda and torch.cuda.is_available(), feature_sizes=train_dict['feature_sizes'], use_deep=pars.use_deep, pars=pars)
+    model = get_model(field_size=field_size, cuda=pars.use_cuda and torch.cuda.is_available(), feature_sizes=train_dict['feature_sizes'], pars=pars)
     if pars.use_cuda and torch.cuda.is_available():
         torch.cuda.empty_cache()
         model = model.cuda()
@@ -43,7 +45,7 @@ if __name__ == '__main__':
     # measurement
     time_on_cuda = False
 
-    model = get_model(cuda=time_on_cuda, feature_sizes=train_dict['feature_sizes'], use_deep=pars.use_deep, pars=pars)
+    model = get_model(field_size=field_size, cuda=time_on_cuda, feature_sizes=train_dict['feature_sizes'], pars=pars)
     model = load_model_dic(model, save_model_name)
     if time_on_cuda:
         model = model.cuda()

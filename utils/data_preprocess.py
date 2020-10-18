@@ -34,7 +34,7 @@ def read_data(file_path, emb_file, num_list, feature_dim_start=0, dim=39, twitte
             result['feature_sizes'].append(len(item) + 1)
 
     f = open(file_path, 'r')
-    for line in f:
+    for line_idx, line in enumerate(f):
         datas = line.strip().split(',')
         result['label'].append(int(datas[0]))
 
