@@ -22,15 +22,13 @@ def load_category_index(file_path, feature_dim_start=0, dim=39):
     return cate_dict
 
 
-def read_data(file_path, emb_file, num_list, feature_dim_start=0, dim=39, twitter=False):
+def read_data(file_path, emb_file, num_list, feature_dim_start=0, dim=39):
     result = {'label': [], 'value': [], 'index': [], 'feature_sizes': []}
     cate_dict = load_category_index(emb_file, feature_dim_start, dim)
     # the left part is numerical features and the right is categorical features
     result['feature_sizes'] = [1] * len(num_list)
     for num, item in enumerate(cate_dict):
-        if num + 1 not in num_list and not twitter:
-            result['feature_sizes'].append(len(item) + 1)
-        if twitter and len(item) > 0:
+        if num + 1 not in num_list:
             result['feature_sizes'].append(len(item) + 1)
 
     f = open(file_path, 'r')

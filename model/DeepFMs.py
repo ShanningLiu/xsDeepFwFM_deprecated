@@ -737,8 +737,6 @@ class DeepFMs(torch.nn.Module):
         y_pred = []
         if self.use_ffm:
             batch_size = 8192 * 2
-        elif self.field_size > 50:
-            batch_size = self.batch_size
         else:
             batch_size = 8192
         batch_iter = x_size // batch_size

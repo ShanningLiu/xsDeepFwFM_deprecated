@@ -21,8 +21,7 @@ class Dataset(torch.utils.data.Dataset):
 
 def get_dataset(pars):
     criteo_num_feat_dim = set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
-    twitter_num_feat_dim = set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
-    twitter_bert_num_feat_dim = set([i for i in range(1, 784)])
+    twitter_num_feat_dim = set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
 
     if pars.dataset == 'tiny-criteo':
         field_size = 39
@@ -31,20 +30,15 @@ def get_dataset(pars):
                                                feature_dim_start=0, dim=field_size)
         valid_dict = data_preprocess.read_data('./data/tiny_test_input.csv', './data/category_emb', criteo_num_feat_dim,
                                                feature_dim_start=0, dim=field_size)
+
     elif pars.dataset == 'twitter':
-        field_size = 20
-        pars.numerical = 15
-        train_dict = data_preprocess.read_data('./data/large/train_twitter_pandas.csv', './data/large/twitter_feature_map_pandas',
-                                               twitter_num_feat_dim, feature_dim_start=1, dim=field_size, twitter=True)
-        valid_dict = data_preprocess.read_data('./data/large/valid_twitter_pandas.csv', './data/large/twitter_feature_map_pandas',
-                                               twitter_num_feat_dim, feature_dim_start=1, dim=field_size, twitter=True)
-    elif pars.dataset == 'twitter-bert':
-        field_size = 788
-        pars.numerical = 783
-        train_dict = data_preprocess.read_data('./data/large/train_twitter_pandas.csv', './data/large/twitter_feature_map_pandas',
-                                               twitter_bert_num_feat_dim, feature_dim_start=1, dim=field_size, twitter=True)
-        valid_dict = data_preprocess.read_data('./data/large/valid_twitter_pandas.csv', './data/large/twitter_feature_map_pandas',
-                                               twitter_bert_num_feat_dim, feature_dim_start=1, dim=field_size, twitter=True)
+        field_size = 47
+        pars.numerical = 11
+        train_dict = data_preprocess.read_data('./data/large/twitter_train.csv', './data/large/twitter_feature_map',
+                                               twitter_num_feat_dim, feature_dim_start=1, dim=field_size)
+        valid_dict = data_preprocess.read_data('./data/large/twitter_valid.csv', './data/large/twitter_feature_map',
+                                               twitter_num_feat_dim, feature_dim_start=1, dim=field_size)
+
     else:  # criteo dataset
         field_size = 39
         '''train_dict = data_preprocess.read_data('./data/large/train_criteo_s.csv', './data/large/criteo_feature_map_s',
