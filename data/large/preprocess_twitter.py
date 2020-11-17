@@ -1,6 +1,5 @@
 import random, math, os
-import pandas as pd
-import numpy as np
+import pandas as pd, numpy as np, gc
 import time
 
 from sklearn.model_selection import train_test_split
@@ -41,6 +40,29 @@ dense_features = ['timestamp', 'a_follower_count', 'a_following_count', 'a_accou
 label_names = ['reply', 'retweet', 'retweet_comment', 'like']
 
 
+def save_memory(df):
+    features = df.columns
+    for i in range(df.shape[1]):
+        if df.dtypes[i] == 'uint8':
+            df[features[i]] = df[features[i]].astype(np.int8)
+            gc.collect()
+        elif df.dtypes[i] == 'bool':
+            df[features[i]] = df[features[i]].astype(np.int8)
+            gc.collect()
+        elif df.dtypes[i] == 'uint32':
+            df[features[i]] = df[features[i]].astype(np.int32)
+            gc.collect()
+        elif df.dtypes[i] == 'int64':
+            df[features[i]] = df[features[i]].astype(np.int32)
+            gc.collect()
+        elif df.dtypes[i] == 'float64':
+            df[features[i]] = df[features[i]].astype(np.float32)
+            gc.collect()
+
+    df[sparse_features] = df[sparse_features].astype(int)
+
+    return df
+
 def cnt_freq_train(inputs):
     count_freq = []
 
@@ -67,7 +89,6 @@ def generate_feature_map_and_train_csv(inputs, train_csv, file_feature_map, freq
             col_map)
 
     inputs.fillna(0, inplace=True)
-    inputs[sparse_features] = inputs[sparse_features].astype(int)
     inputs[['label'] + dense_features + sparse_features].to_csv(train_csv, sep=',', encoding='utf-8', index=False,
                                                                 header=False)
 
@@ -86,13 +107,13 @@ def generate_test_csv(inputs, valid_csv, feature_map):
             col_map)
 
     inputs.fillna(0, inplace=True)
-    inputs[sparse_features] = inputs[sparse_features].astype(int)
     inputs[['label'] + dense_features + sparse_features].to_csv(valid_csv, sep=',', encoding='utf-8', index=False,
                                                                 header=False)
 
 
 category = 'like'
 data = pd.read_parquet('data-final-small.parquet')
+data = save_memory(data)
 data = data[:100000]
 print(data.columns)
 
@@ -103,6 +124,8 @@ for label in label_names:
 data = data[[category] + dense_features + sparse_features]
 data = data.rename(columns={category: 'label'})
 print(data.columns)
+
+print(data.dtypes)
 
 mms = MinMaxScaler(feature_range=(0, 1))
 data[dense_features] = mms.fit_transform(data[dense_features])
