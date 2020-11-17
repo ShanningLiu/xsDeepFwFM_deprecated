@@ -7,6 +7,7 @@ import sys
 import math
 import argparse
 import csv, math, os
+import pandas as pd
 
 
 # criteo feature dimension starts from 0, total feature dimensions 39
@@ -22,7 +23,7 @@ def load_category_index(file_path, feature_dim_start=0, dim=39):
     return cate_dict
 
 
-def read_data(file_path, emb_file, num_list, feature_dim_start=0, dim=39):
+def read_data(file_path, emb_file, num_list, feature_dim_start=0, dim=39, parquet=False):
     result = {'label': [], 'value': [], 'index': [], 'feature_sizes': []}
     cate_dict = load_category_index(emb_file, feature_dim_start, dim)
     # the left part is numerical features and the right is categorical features
@@ -31,15 +32,22 @@ def read_data(file_path, emb_file, num_list, feature_dim_start=0, dim=39):
         if num + 1 not in num_list:
             result['feature_sizes'].append(len(item) + 1)
 
-    f = open(file_path, 'r')
-    for line_idx, line in enumerate(f):
-        datas = line.strip().split(',')
-        result['label'].append(int(datas[0]))
+    if parquet:
+        data = pd.read_parquet(file_path)
+        result['label'] = data['label'].values.tolist()
+        result['index'] = data.iloc[:, [i for i in range(len(num_list) + 1, len(data.columns))]].values.tolist()
+        result['value'] = data.iloc[:, [i for i in range(1, len(num_list) + 1)]].values.tolist()
 
-        indexs = [int(item) for i, item in enumerate(datas) if i not in num_list and i != 0]
-        values = [float(item) for i, item in enumerate(datas) if i in num_list]
-        result['index'].append(indexs)
-        result['value'].append(values)
+    else:
+        f = open(file_path, 'r')
+        for line_idx, line in enumerate(f):
+            datas = line.strip().split(',')
+            result['label'].append(int(datas[0]))
+
+            indexs = [int(item) for i, item in enumerate(datas) if i not in num_list and i != 0]
+            values = [float(item) for i, item in enumerate(datas) if i in num_list]
+            result['index'].append(indexs)
+            result['value'].append(values)
     return result
 
 def get_feature_sizes(emb_file, num_list, feature_dim_start=0, dim=39, twitter=False):

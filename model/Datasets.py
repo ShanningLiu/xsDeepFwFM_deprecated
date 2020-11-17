@@ -34,10 +34,10 @@ def get_dataset(pars):
     elif pars.dataset == 'twitter':
         field_size = 47
         pars.numerical = 11
-        train_dict = data_preprocess.read_data('./data/large/twitter_train.csv', './data/large/twitter_feature_map',
-                                               twitter_num_feat_dim, feature_dim_start=1, dim=field_size)
-        valid_dict = data_preprocess.read_data('./data/large/twitter_valid.csv', './data/large/twitter_feature_map',
-                                               twitter_num_feat_dim, feature_dim_start=1, dim=field_size)
+        train_dict = data_preprocess.read_data('./data/large/twitter_train.parquet', './data/large/twitter_feature_map',
+                                               twitter_num_feat_dim, feature_dim_start=1, dim=field_size, parquet=True)
+        valid_dict = data_preprocess.read_data('./data/large/twitter_valid.parquet', './data/large/twitter_feature_map',
+                                               twitter_num_feat_dim, feature_dim_start=1, dim=field_size, parquet=True)
 
     else:  # criteo dataset
         field_size = 39

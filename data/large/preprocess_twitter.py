@@ -89,8 +89,7 @@ def generate_feature_map_and_train_csv(inputs, train_csv, file_feature_map, freq
             col_map)
 
     inputs.fillna(0, inplace=True)
-    inputs[['label'] + dense_features + sparse_features].to_csv(train_csv, sep=',', encoding='utf-8', index=False,
-                                                                header=False)
+    inputs[['label'] + dense_features + sparse_features].to_parquet(train_csv)
 
     # write feature_map file
     f_map = open(file_feature_map, 'w')
@@ -107,12 +106,12 @@ def generate_test_csv(inputs, valid_csv, feature_map):
             col_map)
 
     inputs.fillna(0, inplace=True)
-    inputs[['label'] + dense_features + sparse_features].to_csv(valid_csv, sep=',', encoding='utf-8', index=False,
-                                                                header=False)
+    inputs[['label'] + dense_features + sparse_features].to_parquet(valid_csv)
 
 
 category = 'like'
 data = pd.read_parquet('data-final-small.parquet')
+data.fillna(0, inplace=True)
 data = save_memory(data)
 data = data[:100000]
 print(data.columns)
@@ -146,10 +145,10 @@ print("Count freq in train")
 freq_dict = cnt_freq_train(data)
 
 print('Generate the feature map and impute the training dataset.')
-feature_map = generate_feature_map_and_train_csv(train, 'twitter_train.csv', 'twitter_feature_map', freq_dict,
+feature_map = generate_feature_map_and_train_csv(train, 'twitter_train.parquet', 'twitter_feature_map', freq_dict,
                                                  threshold=4)
 print('Impute the valid dataset.')
-generate_test_csv(valid, 'twitter_valid.csv', feature_map)
+generate_test_csv(valid, 'twitter_valid.parquet', feature_map)
 
 print('Impute the test dataset.')
-generate_test_csv(test, 'twitter_test.csv', feature_map)
+generate_test_csv(test, 'twitter_test.parquet', feature_map)
