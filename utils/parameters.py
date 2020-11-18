@@ -46,5 +46,7 @@ def getParser():
     parser.add_argument('-qr_threshold', default=200, type=int)
     parser.add_argument('-md_flag', default=0, type=int)
     parser.add_argument('-md_threshold', default=200, type=int)
+    parser.add_argument('-twitter_category', default='like', type=str)
+
 
     return parser

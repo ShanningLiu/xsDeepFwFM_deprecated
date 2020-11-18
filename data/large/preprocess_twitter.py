@@ -66,7 +66,7 @@ def save_memory(df):
 def cnt_freq_train(inputs):
     count_freq = []
 
-    for col in ['label'] + dense_features + sparse_features:
+    for col in label_names + dense_features + sparse_features:
         count_freq.append(inputs[col].value_counts())
 
     return count_freq
@@ -89,7 +89,7 @@ def generate_feature_map_and_train_csv(inputs, train_csv, file_feature_map, freq
             col_map)
 
     inputs.fillna(0, inplace=True)
-    inputs[['label'] + dense_features + sparse_features].to_parquet(train_csv)
+    inputs[label_names + dense_features + sparse_features].to_parquet(train_csv)
 
     # write feature_map file
     f_map = open(file_feature_map, 'w')
@@ -106,7 +106,7 @@ def generate_test_csv(inputs, valid_csv, feature_map):
             col_map)
 
     inputs.fillna(0, inplace=True)
-    inputs[['label'] + dense_features + sparse_features].to_parquet(valid_csv)
+    inputs[label_names + dense_features + sparse_features].to_parquet(valid_csv)
 
 
 category = 'like'
@@ -114,16 +114,9 @@ data = pd.read_parquet('data-final-small.parquet')
 data.fillna(0, inplace=True)
 data = save_memory(data)
 data = data[:100000]
+
+data = data[label_names + dense_features + sparse_features]
 print(data.columns)
-
-for label in label_names:
-    if label != category:
-        data = data.drop(columns=[label])
-
-data = data[[category] + dense_features + sparse_features]
-data = data.rename(columns={category: 'label'})
-print(data.columns)
-
 print(data.dtypes)
 
 mms = MinMaxScaler(feature_range=(0, 1))

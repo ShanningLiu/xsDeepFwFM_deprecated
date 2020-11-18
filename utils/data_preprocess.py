@@ -23,7 +23,7 @@ def load_category_index(file_path, feature_dim_start=0, dim=39):
     return cate_dict
 
 
-def read_data(file_path, emb_file, num_list, feature_dim_start=0, dim=39, parquet=False):
+def read_data(file_path, emb_file, num_list, feature_dim_start=0, dim=39, parquet=False, twitter_category=None):
     result = {'label': [], 'value': [], 'index': [], 'feature_sizes': []}
     cate_dict = load_category_index(emb_file, feature_dim_start, dim)
     # the left part is numerical features and the right is categorical features
@@ -34,7 +34,10 @@ def read_data(file_path, emb_file, num_list, feature_dim_start=0, dim=39, parque
 
     if parquet:
         data = pd.read_parquet(file_path)
-        result['label'] = data['label'].values.tolist()
+        for label in ['reply', 'retweet', 'retweet_comment', 'like']:
+            if label != twitter_category:
+                data = data.drop(columns=[label])
+        result['label'] = data[twitter_category].values.tolist()
         result['index'] = data.iloc[:, [i for i in range(len(num_list) + 1, len(data.columns))]].values.tolist()
         result['value'] = data.iloc[:, [i for i in range(1, len(num_list) + 1)]].values.tolist()
 

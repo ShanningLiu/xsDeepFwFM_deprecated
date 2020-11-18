@@ -1,6 +1,8 @@
 import random
 import numpy as np
 import torch
+from torchsummary import summary
+from tqdm import trange
 
 from model import DeepFMs
 from model.Datasets import Dataset, get_dataset
@@ -21,7 +23,7 @@ if __name__ == '__main__':
     torch.manual_seed(pars.random_seed)
     torch.cuda.manual_seed(pars.random_seed)
 
-    save_model_name = './saved_models/' + pars.c + '_l2_' + str(pars.l2)
+    save_model_name = './saved_models/' + pars.c + '_l2_' + str(pars.l2) + '_dt_' + pars.dataset
 
     if pars.prune:
         save_model_name = save_model_name + '_sparse_' + str(pars.sparse) + '_seed_' + str(pars.random_seed)
@@ -36,6 +38,9 @@ if __name__ == '__main__':
     if pars.use_cuda and torch.cuda.is_available():
         torch.cuda.empty_cache()
         model = model.cuda()
+
+    # Check the network structure of the network
+    #print(summary(model, input_size=train_dict['feature_sizes'])) # TODO
 
     model.fit(train_dict['index'], train_dict['value'], train_dict['label'], valid_dict['index'],
               valid_dict['value'], valid_dict['label'],
