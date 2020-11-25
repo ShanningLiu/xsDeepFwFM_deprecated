@@ -63,6 +63,7 @@ def save_memory(df):
 
     return df
 
+
 def cnt_freq_train(inputs):
     count_freq = []
 
@@ -109,28 +110,27 @@ def generate_test_csv(inputs, valid_csv, feature_map):
     inputs[label_names + dense_features + sparse_features].to_parquet(valid_csv)
 
 
-category = 'like'
-data = pd.read_parquet('data-final-small.parquet')
+train = pd.read_parquet('train_final_s.parquet')
+valid = pd.read_parquet('valid_final_s.parquet')
+test = pd.read_parquet('test_final_s.parquet')
+
+data = pd.concat((train, valid, test), sort=False)
+
 data.fillna(0, inplace=True)
+
 data = save_memory(data)
-data = data[:100000]
 
 data = data[label_names + dense_features + sparse_features]
-print(data.columns)
-print(data.dtypes)
 
 mms = MinMaxScaler(feature_range=(0, 1))
 data[dense_features] = mms.fit_transform(data[dense_features])
 
 print('Split dataset')
-# train = data.loc[(data.tr == 0)]
-# valid = data.loc[(data.tr == 1)]
-# test = data.loc[(data.tr == 2)]
-train = data[:70000]
-valid = data[70000:90000]
-test = data[90000:]
-print(train.shape, valid.shape, test.shape)
+train = data.loc[(data.tr == 0)]
+valid = data.loc[(data.tr == 1)]
+test = data.loc[(data.tr == 2)]
 
+print(train.shape, valid.shape, test.shape)
 print(train.head())
 
 # Not the best way, follow xdeepfm
