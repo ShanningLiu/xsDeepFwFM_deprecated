@@ -8,7 +8,10 @@ import math
 import argparse
 import csv, math, os
 import pandas as pd
-
+import dask
+import dask.dataframe as dd
+import numpy as np
+import utils.util
 
 # criteo feature dimension starts from 0, total feature dimensions 39
 # oath dataset starts from 1
@@ -37,9 +40,14 @@ def read_data(file_path, emb_file, num_list, feature_dim_start=0, dim=39, parque
         for label in ['reply', 'retweet', 'retweet_comment', 'like']:
             if label != twitter_category:
                 data = data.drop(columns=[label])
+
+        data = utils.util.save_memory(data)
+
         result['label'] = data[twitter_category].values.tolist()
         result['index'] = data.iloc[:, [i for i in range(len(num_list) + 1, len(data.columns))]].values.tolist()
         result['value'] = data.iloc[:, [i for i in range(1, len(num_list) + 1)]].values.tolist()
+
+        del data
 
     else:
         f = open(file_path, 'r')

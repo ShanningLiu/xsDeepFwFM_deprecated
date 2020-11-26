@@ -5,6 +5,8 @@ import time
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 
+import utils.util
+
 pd.options.mode.chained_assignment = None
 
 random.seed(0)
@@ -38,30 +40,6 @@ dense_features = ['timestamp', 'a_follower_count', 'a_following_count', 'a_accou
                   'len_hashtags', 'len_domains', 'len_links', 'tw_len']  # = numerical features
 
 label_names = ['reply', 'retweet', 'retweet_comment', 'like']
-
-
-def save_memory(df):
-    features = df.columns
-    for i in range(df.shape[1]):
-        if df.dtypes[i] == 'uint8':
-            df[features[i]] = df[features[i]].astype(np.int8)
-            gc.collect()
-        elif df.dtypes[i] == 'bool':
-            df[features[i]] = df[features[i]].astype(np.int8)
-            gc.collect()
-        elif df.dtypes[i] == 'uint32':
-            df[features[i]] = df[features[i]].astype(np.int32)
-            gc.collect()
-        elif df.dtypes[i] == 'int64':
-            df[features[i]] = df[features[i]].astype(np.int32)
-            gc.collect()
-        elif df.dtypes[i] == 'float64':
-            df[features[i]] = df[features[i]].astype(np.float32)
-            gc.collect()
-
-    df[sparse_features] = df[sparse_features].astype(int)
-
-    return df
 
 
 def cnt_freq_train(inputs):
@@ -110,15 +88,15 @@ def generate_test_csv(inputs, valid_csv, feature_map):
     inputs[label_names + dense_features + sparse_features].to_parquet(valid_csv)
 
 
-train = pd.read_parquet('train_final_s.parquet')
-valid = pd.read_parquet('valid_final_s.parquet')
-test = pd.read_parquet('test_final_s.parquet')
+train = pd.read_parquet('train_s.parquet')
+valid = pd.read_parquet('valid_s.parquet')
+test = pd.read_parquet('test_s.parquet')
 
 data = pd.concat((train, valid, test), sort=False)
 
 data.fillna(0, inplace=True)
 
-data = save_memory(data)
+data = utils.util.save_memory(data)
 
 data = data[label_names + dense_features + sparse_features]
 

@@ -1,5 +1,7 @@
 import torch
 from model import DeepFMs
+import numpy as np, gc
+
 
 def load_model_dic(model, model_file, sparse=False):
     state_dict = torch.load(model_file)
@@ -10,10 +12,12 @@ def load_model_dic(model, model_file, sparse=False):
                 param.to_sparse()
     else:
         model.load_state_dict(state_dict)
-    #model.to('cpu')
+    # model.to('cpu')
     return model
 
-def get_model(cuda, feature_sizes, pars, dynamic_quantization=False, static_quantization=False, quantization_aware=False, field_size=39, deep_nodes=400, h_depth=3):
+
+def get_model(cuda, feature_sizes, pars, dynamic_quantization=False, static_quantization=False,
+              quantization_aware=False, field_size=39, deep_nodes=400, h_depth=3):
     return DeepFMs.DeepFMs(field_size=field_size, feature_sizes=feature_sizes,
                            embedding_size=pars.embedding_size, n_epochs=pars.n_epochs,
                            verbose=False, use_cuda=cuda, use_fm=pars.use_fm, use_fwfm=pars.use_fwfm,
@@ -24,6 +28,32 @@ def get_model(cuda, feature_sizes, pars, dynamic_quantization=False, static_quan
                            numerical=pars.numerical, use_lw=pars.use_lw, use_fwlw=pars.use_fwlw,
                            use_logit=pars.use_logit, random_seed=pars.random_seed,
                            quantization_aware=quantization_aware, dynamic_quantization=dynamic_quantization,
-                           static_quantization=static_quantization, loss_type=pars.loss_type, embedding_bag=pars.embedding_bag,
+                           static_quantization=static_quantization, loss_type=pars.loss_type,
+                           embedding_bag=pars.embedding_bag,
                            qr_flag=pars.qr_flag, qr_operation=pars.qr_operation, qr_collisions=pars.qr_collisions,
                            qr_threshold=pars.qr_threshold, md_flag=pars.md_flag, md_threshold=pars.md_threshold)
+
+
+def save_memory(df):
+    features = df.columns
+    for i in range(df.shape[1]):
+        if df.dtypes[i] == 'uint8':
+            df[features[i]] = df[features[i]].astype(np.int8)
+            gc.collect()
+        elif df.dtypes[i] == 'bool':
+            df[features[i]] = df[features[i]].astype(np.int8)
+            gc.collect()
+        elif df.dtypes[i] == 'uint32':
+            df[features[i]] = df[features[i]].astype(np.int32)
+            gc.collect()
+        elif df.dtypes[i] == 'int64':
+            df[features[i]] = df[features[i]].astype(np.int32)
+            gc.collect()
+        elif df.dtypes[i] == 'float64':
+            df[features[i]] = df[features[i]].astype(np.float32)
+            gc.collect()
+
+    gc.collect()
+    print(df.dtypes)
+
+    return df
