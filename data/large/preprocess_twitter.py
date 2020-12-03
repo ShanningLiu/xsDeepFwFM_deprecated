@@ -5,7 +5,7 @@ import time
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 
-import utils.util
+from utils.util import save_memory
 
 pd.options.mode.chained_assignment = None
 
@@ -41,7 +41,6 @@ dense_features = ['timestamp', 'a_follower_count', 'a_following_count', 'a_accou
 
 label_names = ['reply', 'retweet', 'retweet_comment', 'like']
 
-
 def cnt_freq_train(inputs):
     count_freq = []
 
@@ -68,6 +67,7 @@ def generate_feature_map_and_train_csv(inputs, train_csv, file_feature_map, freq
             col_map)
 
     inputs.fillna(0, inplace=True)
+    inputs = save_memory(inputs)
     inputs[label_names + dense_features + sparse_features].to_parquet(train_csv)
 
     # write feature_map file
@@ -85,18 +85,18 @@ def generate_test_csv(inputs, valid_csv, feature_map):
             col_map)
 
     inputs.fillna(0, inplace=True)
+    inputs = save_memory(inputs)
     inputs[label_names + dense_features + sparse_features].to_parquet(valid_csv)
 
 
-train = pd.read_parquet('train_s.parquet')
-valid = pd.read_parquet('valid_s.parquet')
-test = pd.read_parquet('test_s.parquet')
+
+train = pd.read_parquet('./train_final_s.parquet')
+valid = pd.read_parquet('./valid_final_s.parquet')
+test = pd.read_parquet('./test_final_s.parquet')
 
 data = pd.concat((train, valid, test), sort=False)
 
 data.fillna(0, inplace=True)
-
-data = utils.util.save_memory(data)
 
 data = data[label_names + dense_features + sparse_features]
 
@@ -111,15 +111,17 @@ test = data.loc[(data.tr == 2)]
 print(train.shape, valid.shape, test.shape)
 print(train.head())
 
+del data
+
 # Not the best way, follow xdeepfm
 print("Count freq in train")
-freq_dict = cnt_freq_train(data)
+freq_dict = cnt_freq_train(train)
 
 print('Generate the feature map and impute the training dataset.')
-feature_map = generate_feature_map_and_train_csv(train, 'twitter_train.parquet', 'twitter_feature_map', freq_dict,
-                                                 threshold=4)
+feature_map = generate_feature_map_and_train_csv(train, 'twitter_train_s.parquet', 'twitter_feature_map_s', freq_dict,
+                                                 threshold=8)
 print('Impute the valid dataset.')
-generate_test_csv(valid, 'twitter_valid.parquet', feature_map)
+generate_test_csv(valid, 'twitter_valid_s.parquet', feature_map)
 
 print('Impute the test dataset.')
-generate_test_csv(test, 'twitter_test.parquet', feature_map)
+generate_test_csv(test, 'twitter_test_s.parquet', feature_map)

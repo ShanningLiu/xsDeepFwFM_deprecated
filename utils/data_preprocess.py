@@ -10,7 +10,7 @@ import csv, math, os
 import pandas as pd
 import dask
 import dask.dataframe as dd
-import numpy as np
+import numpy as np, gc
 import utils.util
 
 # criteo feature dimension starts from 0, total feature dimensions 39
@@ -25,8 +25,7 @@ def load_category_index(file_path, feature_dim_start=0, dim=39):
         cate_dict[int(datas[0]) - feature_dim_start][datas[1]] = int(datas[2])
     return cate_dict
 
-
-def read_data(file_path, emb_file, num_list, feature_dim_start=0, dim=39, parquet=False, twitter_category=None):
+def read_data_twitter(file_path, emb_file, num_list, feature_dim_start=0, dim=39, twitter_category=None):
     result = {'label': [], 'value': [], 'index': [], 'feature_sizes': []}
     cate_dict = load_category_index(emb_file, feature_dim_start, dim)
     # the left part is numerical features and the right is categorical features
@@ -35,30 +34,39 @@ def read_data(file_path, emb_file, num_list, feature_dim_start=0, dim=39, parque
         if num + 1 not in num_list:
             result['feature_sizes'].append(len(item) + 1)
 
-    if parquet:
-        data = pd.read_parquet(file_path)
-        for label in ['reply', 'retweet', 'retweet_comment', 'like']:
-            if label != twitter_category:
-                data = data.drop(columns=[label])
+    data = dd.read_parquet(file_path)
+    for label in ['reply', 'retweet', 'retweet_comment', 'like']:
+        if label != twitter_category:
+            data = data.drop(columns=[label])
 
-        data = utils.util.save_memory(data)
+    #print(data.dtypes)
 
-        result['label'] = data[twitter_category].values.tolist()
-        result['index'] = data.iloc[:, [i for i in range(len(num_list) + 1, len(data.columns))]].values.tolist()
-        result['value'] = data.iloc[:, [i for i in range(1, len(num_list) + 1)]].values.tolist()
+    result['label'] = data[twitter_category].values.compute().tolist()
+    result['index'] = data.iloc[:, [i for i in range(len(num_list) + 1, len(data.columns))]].values.compute().tolist()
+    result['value'] = data.iloc[:, [i for i in range(1, len(num_list) + 1)]].values.compute().tolist()
 
-        del data
+    del data
 
-    else:
-        f = open(file_path, 'r')
-        for line_idx, line in enumerate(f):
-            datas = line.strip().split(',')
-            result['label'].append(int(datas[0]))
+    return result
 
-            indexs = [int(item) for i, item in enumerate(datas) if i not in num_list and i != 0]
-            values = [float(item) for i, item in enumerate(datas) if i in num_list]
-            result['index'].append(indexs)
-            result['value'].append(values)
+def read_data(file_path, emb_file, num_list, feature_dim_start=0, dim=39):
+    result = {'label': [], 'value': [], 'index': [], 'feature_sizes': []}
+    cate_dict = load_category_index(emb_file, feature_dim_start, dim)
+    # the left part is numerical features and the right is categorical features
+    result['feature_sizes'] = [1] * len(num_list)
+    for num, item in enumerate(cate_dict):
+        if num + 1 not in num_list:
+            result['feature_sizes'].append(len(item) + 1)
+
+    f = open(file_path, 'r')
+    for line_idx, line in enumerate(f):
+        datas = line.strip().split(',')
+        result['label'].append(int(datas[0]))
+
+        indexs = [int(item) for i, item in enumerate(datas) if i not in num_list and i != 0]
+        values = [float(item) for i, item in enumerate(datas) if i in num_list]
+        result['index'].append(indexs)
+        result['value'].append(values)
     return result
 
 def get_feature_sizes(emb_file, num_list, feature_dim_start=0, dim=39, twitter=False):
