@@ -1,6 +1,26 @@
 import torch
 from model import DeepFMs
 import numpy as np, gc
+import logging
+import sys
+
+def get_logger(filename=None):
+    root = logging.getLogger('xsDeepFwFM')
+    root.setLevel(logging.DEBUG)
+
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    root.addHandler(handler)
+
+    if filename:
+        file_handler = logging.FileHandler(filename='./logs/' + filename + '.log')
+        file_handler.setLevel(logging.DEBUG)
+        file_handler.setFormatter(formatter)
+        root.addHandler(file_handler)
+
+    return root
 
 
 def load_model_dic(model, model_file, sparse=False):
@@ -17,7 +37,7 @@ def load_model_dic(model, model_file, sparse=False):
 
 
 def get_model(cuda, feature_sizes, pars, dynamic_quantization=False, static_quantization=False,
-              quantization_aware=False, field_size=39, deep_nodes=400, h_depth=3):
+              quantization_aware=False, field_size=39, deep_nodes=400, h_depth=3, logger=None):
     return DeepFMs.DeepFMs(field_size=field_size, feature_sizes=feature_sizes,
                            embedding_size=pars.embedding_size, n_epochs=pars.n_epochs,
                            verbose=False, use_cuda=cuda, use_fm=pars.use_fm, use_fwfm=pars.use_fwfm,
@@ -31,7 +51,7 @@ def get_model(cuda, feature_sizes, pars, dynamic_quantization=False, static_quan
                            static_quantization=static_quantization, loss_type=pars.loss_type,
                            embedding_bag=pars.embedding_bag,
                            qr_flag=pars.qr_flag, qr_operation=pars.qr_operation, qr_collisions=pars.qr_collisions,
-                           qr_threshold=pars.qr_threshold, md_flag=pars.md_flag, md_threshold=pars.md_threshold)
+                           qr_threshold=pars.qr_threshold, md_flag=pars.md_flag, md_threshold=pars.md_threshold, logger=logger)
 
 
 def save_memory(df):
@@ -54,6 +74,6 @@ def save_memory(df):
             gc.collect()
 
     gc.collect()
-    print(df.dtypes)
+    logger.info(df.dtypes)
 
     return df

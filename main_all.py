@@ -6,18 +6,17 @@ from tqdm import trange
 
 from model import DeepFMs
 from model.Datasets import Dataset, get_dataset
-from utils.parameters import getParser
-from utils.util import get_model, load_model_dic
+from utils.parameters import get_parser
+from utils.util import get_model, load_model_dic, get_logger
 
 import os
 
-parser = getParser()
+parser = get_parser()
 pars = parser.parse_args()
 
 if __name__ == '__main__':
     #os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
 
-    print(pars)
     np.random.seed(pars.random_seed)
     random.seed(pars.random_seed)
     torch.manual_seed(pars.random_seed)
@@ -32,15 +31,15 @@ if __name__ == '__main__':
     if pars.md_flag:
         save_model_name = save_model_name + '_md'
 
+    logger = get_logger(save_model_name[14:])
+    logger.info(pars)
+
     field_size, train_dict, valid_dict = get_dataset(pars)
 
-    model = get_model(field_size=field_size, cuda=pars.use_cuda and torch.cuda.is_available(), feature_sizes=train_dict['feature_sizes'], pars=pars)
+    model = get_model(field_size=field_size, cuda=pars.use_cuda and torch.cuda.is_available(), feature_sizes=train_dict['feature_sizes'], pars=pars, logger=logger)
     if pars.use_cuda and torch.cuda.is_available():
         torch.cuda.empty_cache()
         model = model.cuda()
-
-    # Check the network structure of the network
-    #print(summary(model, input_size=train_dict['feature_sizes'])) # TODO
 
     model.fit(train_dict['index'], train_dict['value'], train_dict['label'], valid_dict['index'],
               valid_dict['value'], valid_dict['label'],
@@ -50,7 +49,7 @@ if __name__ == '__main__':
     # measurement
     time_on_cuda = False
 
-    model = get_model(field_size=field_size, cuda=time_on_cuda, feature_sizes=train_dict['feature_sizes'], pars=pars)
+    model = get_model(field_size=field_size, cuda=time_on_cuda, feature_sizes=train_dict['feature_sizes'], pars=pars, logger=logger)
     model = load_model_dic(model, save_model_name)
     if time_on_cuda:
         model = model.cuda()

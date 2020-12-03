@@ -6,8 +6,8 @@ import numpy as np
 
 from model import DeepFMs
 from utils import data_preprocess
-from utils.parameters import getParser
-from utils.util import get_model, load_model_dic
+from utils.parameters import get_parser
+from utils.util import get_model, load_model_dic, get_logger
 
 import torch
 import warnings
@@ -17,8 +17,11 @@ source: https://github.com/peterliht/knowledge-distillation-pytorch
 """
 warnings.filterwarnings("ignore")
 
-parser = getParser()
+parser = get_parser()
 pars = parser.parse_args()
+
+logger = get_logger()
+logger.info(pars)
 
 criteo_num_feat_dim = set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
 field_size = 39
@@ -28,20 +31,20 @@ valid_dict = data_preprocess.read_data('./data/large/valid_criteo.csv', './data/
                                        criteo_num_feat_dim, feature_dim_start=1, dim=39)
 
 if not pars.save_model_name:
-    print("no model path given: -save_model_name")
+    logger.info("no model path given: -save_model_name")
     sys.exit()
 
 if __name__ == '__main__':
-    model = get_model(cuda=1, feature_sizes=train_dict['feature_sizes'], pars=pars)
+    model = get_model(cuda=1, feature_sizes=train_dict['feature_sizes'], pars=pars, logger=logger)
     model = load_model_dic(model, pars.save_model_name)
 
     number_of_deep_nodes = 32
     h_depth = 1
 
     student = get_model(cuda=pars.use_cuda and torch.cuda.is_available(), feature_sizes=train_dict['feature_sizes'], deep_nodes=number_of_deep_nodes, h_depth=h_depth, use_deep=False,
-                        pars=pars)
-    print(model)
-    print(student)
+                        pars=pars, logger=logger)
+    logger.info(model)
+    logger.info(student)
 
     if pars.use_cuda and torch.cuda.is_available():
         torch.cuda.empty_cache()
@@ -54,15 +57,15 @@ if __name__ == '__main__':
                 save_path=pars.save_model_name + '_kd', emb_r=pars.emb_r, emb_corr=pars.emb_corr, teacher_model=model)
 
 
-    print('Original model:')
-    model = get_model(cuda=0, feature_sizes=train_dict['feature_sizes'], pars=pars)
+    logger.info('Original model:')
+    model = get_model(cuda=0, feature_sizes=train_dict['feature_sizes'], pars=pars, logger=logger)
     model = load_model_dic(model, pars.save_model_name)
     f = model.print_size_of_model()
     model.run_benchmark(valid_dict['index'], valid_dict['value'], valid_dict['label'])
 
-    print('Student model:')
-    student = get_model(cuda=0, feature_sizes=train_dict['feature_sizes'], deep_nodes=number_of_deep_nodes, h_depth=h_depth, use_deep=False, pars=pars)
+    logger.info('Student model:')
+    student = get_model(cuda=0, feature_sizes=train_dict['feature_sizes'], deep_nodes=number_of_deep_nodes, h_depth=h_depth, use_deep=False, pars=pars, logger=logger)
     student = load_model_dic(student, pars.save_model_name + '_kd')
     s = student.print_size_of_model()
-    print("\t{0:.2f} times smaller".format(f / s))
+    logger.info("\t{0:.2f} times smaller".format(f / s))
     student.run_benchmark(valid_dict['index'], valid_dict['value'], valid_dict['label'])

@@ -85,7 +85,7 @@ class DeepFMs(torch.nn.Module):
                  loss_type='logloss',
                  use_cuda=True, n_class=1, greater_is_better=True, sparse=0.9, warm=10, num_deeps=1, numerical=13,
                  use_logit=0, embedding_bag=False, quantization_aware=False, dynamic_quantization=False, static_quantization=False, static_calibrate=False,
-                 qr_flag=0, qr_operation="mult", qr_collisions=1, qr_threshold=200, md_flag=0, md_threshold=200):
+                 qr_flag=0, qr_operation="mult", qr_collisions=1, qr_threshold=200, md_flag=0, md_threshold=200, logger=None):
         super(DeepFMs, self).__init__()
         self.field_size = field_size
         self.feature_sizes = feature_sizes
@@ -133,6 +133,7 @@ class DeepFMs(torch.nn.Module):
         self.qr_threshold = qr_threshold
         self.md_flag = md_flag
         self.md_threshold = md_threshold
+        self.logger = logger
 
         np.random.seed(self.random_seed)
         random.seed(self.random_seed)
@@ -144,31 +145,31 @@ class DeepFMs(torch.nn.Module):
         """
         if self.use_cuda and not torch.cuda.is_available():
             self.use_cuda = False
-            print("Cuda is not available, automatically changed into cpu model")
+            self.logger.info("Cuda is not available, automatically changed into cpu model")
         """
             check use fm, fwfm or ffm
         """
         if int(self.use_fm) + int(self.use_ffm) + int(self.use_fwfm) + int(self.use_logit) > 1:
-            print("only support one type only, please make sure to choose only LR, FM, FFM or FwFM part")
+            self.logger.info("only support one type only, please make sure to choose only LR, FM, FFM or FwFM part")
             exit(1)
         elif self.use_logit:
-            print("The model is logistic regression.")
+            self.logger.info("The model is logistic regression.")
         elif self.use_fm and self.use_deep:
-            print("The model is deepfm(fm+deep layers)")
+            self.logger.info("The model is deepfm(fm+deep layers)")
         elif self.use_ffm and self.use_deep:
-            print("The model is deepffm(ffm+deep layers)")
+            self.logger.info("The model is deepffm(ffm+deep layers)")
         elif self.use_fwfm and self.use_deep:
-            print("The model is deepfwfm(fwfm+deep layers)")
+            self.logger.info("The model is deepfwfm(fwfm+deep layers)")
         elif self.use_fm:
-            print("The model is fm only")
+            self.logger.info("The model is fm only")
         elif self.use_ffm:
-            print("The model is ffm only")
+            self.logger.info("The model is ffm only")
         elif self.use_fwfm:
-            print("The model is fwfm only")
+            self.logger.info("The model is fwfm only")
         elif self.use_deep:
-            print("The model is deep layers only")
+            self.logger.info("The model is deep layers only")
         else:
-            print("You have to choose more than one of (fm, ffm, fwfm, deep) models to use")
+            self.logger.info("You have to choose more than one of (fm, ffm, fwfm, deep) models to use")
             exit(1)
 
         """
@@ -181,11 +182,11 @@ class DeepFMs(torch.nn.Module):
         """
         if self.use_logit or self.use_fm or self.use_fwfm:
             if self.use_logit and self.verbose:
-                print("Init Logistic regression")
+                self.logger.info("Init Logistic regression")
             elif self.use_fm and self.verbose:
-                print("Init fm part")
+                self.logger.info("Init fm part")
             elif self.verbose:
-                print("Init fwfm part")
+                self.logger.info("Init fwfm part")
             if not self.use_fwlw:
                 # no 1 dim emb bag for md possible
                 if self.md_flag or not self.embedding_bag:
@@ -217,7 +218,7 @@ class DeepFMs(torch.nn.Module):
             ffm part
         """
         if self.use_ffm:  # TODO if used embedding_bag
-            print("Init ffm part")
+            self.logger.info("Init ffm part")
             self.ffm_1st_embeddings = nn.ModuleList(
                 [nn.Embedding(feature_size, 1) for feature_size in self.feature_sizes])
             if self.dropout_shallow:
@@ -233,7 +234,7 @@ class DeepFMs(torch.nn.Module):
         """
         if self.use_deep:
             if self.verbose:
-                print("Init deep part")
+                self.logger.info("Init deep part")
             for nidx in range(1, self.num_deeps + 1):
                 if not self.use_fm and not self.use_ffm:
                     if self.embedding_bag:
@@ -296,7 +297,7 @@ class DeepFMs(torch.nn.Module):
                 fm_first_order = torch.cat(fm_1st_emb_arr, 1)
                 if self.is_shallow_dropout:
                     fm_first_order = self.fm_first_order_dropout(fm_first_order)
-                # print(fm_first_order.shape, "old linear")
+                # self.logger.info(fm_first_order.shape, "old linear")
             # dim: field_size * batch_size * embedding_size, time cost 43%
             if self.use_fm or self.use_fwfm:
                 if self.embedding_bag:
@@ -313,7 +314,7 @@ class DeepFMs(torch.nn.Module):
                     fm_first_order = torch.einsum('ijk->ji', [fwfm_linear])
                     if self.is_shallow_dropout:
                         fm_first_order = self.fm_first_order_dropout(fm_first_order)
-                    # print(fm_first_order.shape, "new fwfm linear")
+                    # self.logger.info(fm_first_order.shape, "new fwfm linear")
 
                 # compute outer product, outer_fm: 39x39x2048x10
                 outer_fm = torch.einsum('kij,lij->klij', fm_second_order_tensor, fm_second_order_tensor)
@@ -342,7 +343,7 @@ class DeepFMs(torch.nn.Module):
                         torch.einsum('kkij->kij', outer_fwfm), 0)) * 0.5
                 if self.is_shallow_dropout:
                     fm_second_order = self.fm_second_order_dropout(fm_second_order)
-                # print(fm_second_order.shape)
+                # self.logger.info(fm_second_order.shape)
         """
             ffm part
         """
@@ -420,8 +421,8 @@ class DeepFMs(torch.nn.Module):
         """
             sum
         """
-        # print(fm_first_order.shape, "linear dim")
-        # print(torch.sum(fm_first_order,1).shape, "sum dim")
+        # self.logger.info(fm_first_order.shape, "linear dim")
+        # self.logger.info(torch.sum(fm_first_order,1).shape, "sum dim")
 
         # total_sum dim: batch, time cost 1.3%
         if (self.use_fm or self.use_fwfm) and self.use_lw:
@@ -503,12 +504,12 @@ class DeepFMs(torch.nn.Module):
 
         '''
         if save_path and not os.path.exists('/'.join(save_path.split('/')[0:-1])):
-            print("Save path is not existed!")
+            self.logger.info("Save path is not existed!")
             return
         '''
 
         if self.verbose:
-            print("pre_process data ing...")
+            self.logger.info("pre_process data ing...")
         is_valid = False
         Xi_train = np.array(Xi_train).reshape((-1, self.field_size - self.num, 1))
         Xv_train = np.array(Xv_train)
@@ -521,9 +522,9 @@ class DeepFMs(torch.nn.Module):
             x_valid_size = Xi_valid.shape[0]
             is_valid = True
         if self.verbose:
-            print("pre_process data finished")
+            self.logger.info("pre_process data finished")
 
-        print('init_weights')
+        self.logger.info('init_weights')
         self.init_weights()
 
         """
@@ -547,10 +548,10 @@ class DeepFMs(torch.nn.Module):
         num_1st_order_embeddings = 0
         num_2nd_order_embeddings = 0
         num_dnn = 0
-        print('========')
+        self.logger.info('========')
         for name, param in model.named_parameters():
             if self.verbose:
-                print(name, param.data.shape)
+                self.logger.info(name, param.data.shape)
             num_total += np.prod(param.data.shape)
             if '1st_embeddings' in name:
                 num_1st_order_embeddings += np.prod(param.data.shape)
@@ -561,13 +562,13 @@ class DeepFMs(torch.nn.Module):
             if 'field_cov.weight' == name:
                 symm_sum = 0.5 * (param.data + param.data.t())
                 non_zero_r = (symm_sum != 0).sum().item()
-        print('Summation of feature sizes: %s' % (sum(self.feature_sizes)))
-        print('Number of 1st order embeddings: %d' % (num_1st_order_embeddings))
-        print('Number of 2nd order embeddings: %d' % (num_2nd_order_embeddings))
-        print('Number of 2nd order interactions: %d' % (non_zero_r))
-        print('Number of DNN parameters: %d' % (num_dnn))
-        print("Number of total parameters: %d" % (num_total))
-        print('========')
+        self.logger.info('Summation of feature sizes: %s' % (sum(self.feature_sizes)))
+        self.logger.info('Number of 1st order embeddings: %d' % (num_1st_order_embeddings))
+        self.logger.info('Number of 2nd order embeddings: %d' % (num_2nd_order_embeddings))
+        self.logger.info('Number of 2nd order interactions: %d' % (non_zero_r))
+        self.logger.info('Number of DNN parameters: %d' % (num_dnn))
+        self.logger.info("Number of total parameters: %d" % (num_total))
+        self.logger.info('========')
         num_total_original = num_total
 
         n_iter = 0
@@ -618,7 +619,7 @@ class DeepFMs(torch.nn.Module):
                 total_loss += loss.data.item()
                 if self.verbose and i % 100 == 99:
                     eval = self.evaluate(batch_xi, batch_xv, batch_y)
-                    print('[%d, %5d] loss: %.6f metric: %.6f time: %.1f s' %
+                    self.logger.info('[%d, %5d] loss: %.6f metric: %.6f time: %.1f s' %
                           (epoch + 1, i + 1, total_loss / 100.0, eval, time() - batch_begin_time))
                     total_loss = 0.0
                     batch_begin_time = time()
@@ -656,10 +657,10 @@ class DeepFMs(torch.nn.Module):
             no_non_sparse = 0
             for name, param in model.named_parameters():
                 no_non_sparse += (param != 0).sum().item()
-            print('Model parameters %d, sparse rate %.2f%%' % (no_non_sparse, 100 - no_non_sparse * 100. / num_total))
+            self.logger.info('Model parameters %d, sparse rate %.2f%%' % (no_non_sparse, 100 - no_non_sparse * 100. / num_total))
             train_loss, train_eval, train_prauc, train_rce = self.eval_by_batch(Xi_train, Xv_train, y_train, x_size)
             train_result.append(train_eval)
-            print('Training [%d] loss: %.6f metric: %.6f prauc: %.4f rce: %.2f sparse %.2f%% time: %.1f s' %
+            self.logger.info('Training [%d] loss: %.6f metric: %.6f prauc: %.4f rce: %.2f sparse %.2f%% time: %.1f s' %
                   (
                       epoch + 1, train_loss, train_eval, train_prauc, train_rce, 100 - no_non_sparse * 100. / num_total,
                       time() - epoch_begin_time))
@@ -667,12 +668,12 @@ class DeepFMs(torch.nn.Module):
                 valid_loss, valid_eval, vaild_prauc, valid_rce = self.eval_by_batch(Xi_valid, Xv_valid, y_valid,
                                                                                     x_valid_size)
                 valid_result.append(valid_eval)
-                print('Validation [%d] loss: %.6f metric: %.6f prauc: %.4f rce: %.2f sparse %.2f%% time: %.1f s' %
+                self.logger.info('Validation [%d] loss: %.6f metric: %.6f prauc: %.4f rce: %.2f sparse %.2f%% time: %.1f s' %
                       (
                           epoch + 1, valid_loss, valid_eval, vaild_prauc, valid_rce,
                           100 - no_non_sparse * 100. / num_total,
                           time() - epoch_begin_time))
-            print('*' * 50)
+            self.logger.info('*' * 50)
 
             # shuffle training dataset
             permute_idx = np.random.permutation(x_size)
@@ -680,12 +681,12 @@ class DeepFMs(torch.nn.Module):
             Xv_train = Xv_train[permute_idx]
             y_train = y_train[permute_idx]
             if self.verbose:
-                print('Training dataset shuffled.')
+                self.logger.info('Training dataset shuffled.')
 
             if save_path:
                 torch.save(self.state_dict(), save_path)
             if is_valid and early_stopping and self.training_termination(valid_result):
-                print("early stop at [%d] epoch!" % (epoch + 1))
+                self.logger.info("early stop at [%d] epoch!" % (epoch + 1))
                 break
 
             # quantization aware training
@@ -705,7 +706,7 @@ class DeepFMs(torch.nn.Module):
             num_2nd_order_embeddings = 0
             num_dnn = 0
             non_zero_r = 0
-            print('========')
+            self.logger.info('========')
             for name, param in model.named_parameters():
                 num_total += (param != 0).sum().item()
                 if '1st_embeddings' in name:
@@ -717,13 +718,13 @@ class DeepFMs(torch.nn.Module):
                 if 'field_cov.weight' == name:
                     symm_sum = 0.5 * (param.data + param.data.t())
                     non_zero_r = (symm_sum != 0).sum().item()
-            print('Number of pruned 1st order embeddings: %d' % (num_1st_order_embeddings))
-            print('Number of pruned 2nd order embeddings: %d' % (num_2nd_order_embeddings))
-            print('Number of pruned 2nd order interactions: %d' % (non_zero_r))
-            print('Number of pruned DNN parameters: %d' % (num_dnn))
-            print("Number of pruned total parameters: %d" % (num_total))
-            print("Non pruned model parameters: \t%d" % (num_total_original))
-            print("Difference: \t%d" % (num_total_original-num_total))
+            self.logger.info('Number of pruned 1st order embeddings: %d' % (num_1st_order_embeddings))
+            self.logger.info('Number of pruned 2nd order embeddings: %d' % (num_2nd_order_embeddings))
+            self.logger.info('Number of pruned 2nd order interactions: %d' % (non_zero_r))
+            self.logger.info('Number of pruned DNN parameters: %d' % (num_dnn))
+            self.logger.info("Number of pruned total parameters: %d" % (num_total))
+            self.logger.info("Non pruned model parameters: \t%d" % (num_total_original))
+            self.logger.info("Difference: \t%d" % (num_total_original-num_total))
 
     def eval_by_batch(self, Xi, Xv, y, x_size):
         if self.quantization_aware:
@@ -883,7 +884,7 @@ class DeepFMs(torch.nn.Module):
     def print_size_of_model(self):
         torch.save(self.state_dict(), "temp.p")
         size = os.path.getsize("temp.p")
-        print('\tSize (MB):', size / 1e6)
+        self.logger.info('\tSize (MB):' + str(size / 1e6))
         os.remove('temp.p')
         return size
 
@@ -896,12 +897,12 @@ class DeepFMs(torch.nn.Module):
         x_size = Xi.shape[0]
 
         loss, total_metric, prauc, rce = self.eval_by_batch(Xi, Xv, y, x_size)
-        print('\tLoss: ', loss)
-        print('\tAcc: ', total_metric)
+        self.logger.info('\tLoss: ' + str(loss))
+        self.logger.info('\tAcc: ' + str(total_metric))
 
         #with torch.autograd.profiler.profile() as prof:
             #loss, total_metric, prauc, rce = self.eval_by_batch(Xi, Xv, y, x_size)
-        #print(prof.key_averages().table(sort_by="self_cpu_time_total"))
+        #self.logger.info(prof.key_averages().table(sort_by="self_cpu_time_total"))
 
         model = self
         if quantization_aware:
@@ -933,7 +934,7 @@ class DeepFMs(torch.nn.Module):
             end = time()
             time_spent.append(end - start)
 
-        print('\tAvg execution time per forward (s): {:.5f}'.format(np.mean(time_spent)))
+        self.logger.info('\tAvg execution time per forward (s): {:.5f}'.format(np.mean(time_spent)))
 
     def fetch_teacher_outputs(self, teacher_model, Xi, Xv, x_size):
         teacher_model.eval()

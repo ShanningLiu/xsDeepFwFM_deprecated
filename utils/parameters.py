@@ -1,5 +1,5 @@
 import argparse
-def getParser():
+def get_parser():
     parser = argparse.ArgumentParser(description='Hyperparameter tuning and selection')
     parser.add_argument('-c', default='DeepFwFM', type=str, help='Models: FM, DeepFwFM ...')
     parser.add_argument('-use_cuda', default=1, type=int, help='Use CUDA or not')
