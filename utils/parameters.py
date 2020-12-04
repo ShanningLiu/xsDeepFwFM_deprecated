@@ -32,8 +32,8 @@ def get_parser():
     parser.add_argument('-learning_rate', default=0.001, type=float, help='Learning rate')
     parser.add_argument('-momentum', default=0, type=float, help='Momentum')
     parser.add_argument('-l2', default=3e-7, type=float, help='L2 penalty')
-    parser.add_argument('-dataset', default='criteo', type=str, help='Dataset to use')
-    parser.add_argument('-save_model_name', default=0, type=str, help='Saved model path')
+    parser.add_argument('-dataset', default='criteo', type=str, help='Dataset to use', choices=['criteo', 'tiny-criteo', 'twitter'])
+    parser.add_argument('-save_model_path', default=0, type=str, help='Saved model path')
     parser.add_argument('-dynamic_quantization', default=0, type=int, help='Apply dynamic network quantization')
     parser.add_argument('-static_quantization', default=0, type=int, help='Apply static network quantization')
     parser.add_argument('-quantization_aware', default=0, type=int, help='Quantization Aware Training')
@@ -46,7 +46,7 @@ def get_parser():
     parser.add_argument('-qr_threshold', default=200, type=int)
     parser.add_argument('-md_flag', default=0, type=int)
     parser.add_argument('-md_threshold', default=200, type=int)
-    parser.add_argument('-twitter_category', default='like', type=str)
+    parser.add_argument('-twitter_category', default='like', type=str, choices=['reply', 'retweet', 'retweet_comment', 'like'])
 
 
     return parser

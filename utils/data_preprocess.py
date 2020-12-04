@@ -34,16 +34,16 @@ def read_data_twitter(file_path, emb_file, num_list, feature_dim_start=0, dim=39
         if num + 1 not in num_list:
             result['feature_sizes'].append(len(item) + 1)
 
-    data = dd.read_parquet(file_path)
+    data = pd.read_parquet(file_path)
     for label in ['reply', 'retweet', 'retweet_comment', 'like']:
         if label != twitter_category:
             data = data.drop(columns=[label])
 
     #print(data.dtypes)
 
-    result['label'] = data[twitter_category].values.compute().tolist()
-    result['index'] = data.iloc[:, [i for i in range(len(num_list) + 1, len(data.columns))]].values.compute().tolist()
-    result['value'] = data.iloc[:, [i for i in range(1, len(num_list) + 1)]].values.compute().tolist()
+    result['label'] = data[twitter_category]
+    result['index'] = data.iloc[:, [i for i in range(len(num_list) + 1, len(data.columns))]]
+    result['value'] = data.iloc[:, [i for i in range(1, len(num_list) + 1)]]
 
     del data
 

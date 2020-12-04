@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 from utils import data_preprocess
+import pickle
 
 class Dataset(torch.utils.data.Dataset):
     def __init__(self, X_index, X_value, labels, size):
@@ -37,6 +38,7 @@ def get_dataset(pars):
         train_dict = data_preprocess.read_data_twitter('./data/large/twitter_train_s.parquet', './data/large/twitter_feature_map_s',
                                                twitter_num_feat_dim, feature_dim_start=4, dim=field_size,
                                                twitter_category=pars.twitter_category)
+
         valid_dict = data_preprocess.read_data_twitter('./data/large/twitter_valid_s.parquet', './data/large/twitter_feature_map_s',
                                                twitter_num_feat_dim, feature_dim_start=4, dim=field_size,
                                                twitter_category=pars.twitter_category)

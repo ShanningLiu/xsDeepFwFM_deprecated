@@ -515,7 +515,7 @@ class DeepFMs(torch.nn.Module):
         Xv_train = np.array(Xv_train)
         y_train = np.array(y_train)
         x_size = Xi_train.shape[0]
-        if Xi_valid:
+        if len(Xi_valid) > 0:
             Xi_valid = np.array(Xi_valid).reshape((-1, self.field_size - self.num, 1))
             Xv_valid = np.array(Xv_valid)
             y_valid = np.array(y_valid)
@@ -739,7 +739,7 @@ class DeepFMs(torch.nn.Module):
         if self.use_ffm:
             batch_size = 8192 * 2
         else:
-            batch_size = 8192
+            batch_size = 4096 # TODO 8192
         batch_iter = x_size // batch_size
         criterion = F.binary_cross_entropy_with_logits
         for i in range(batch_iter + 1):

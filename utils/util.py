@@ -20,6 +20,8 @@ def get_logger(filename=None):
         file_handler.setFormatter(formatter)
         root.addHandler(file_handler)
 
+    root.propagate = False
+
     return root
 
 

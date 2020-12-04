@@ -39,6 +39,7 @@ if __name__ == '__main__':
     model = get_model(field_size=field_size, cuda=pars.use_cuda and torch.cuda.is_available(), feature_sizes=train_dict['feature_sizes'], pars=pars, logger=logger)
     if pars.use_cuda and torch.cuda.is_available():
         torch.cuda.empty_cache()
+        #logger.info(torch.cuda.memory_summary(device=None, abbreviated=False))
         model = model.cuda()
 
     model.fit(train_dict['index'], train_dict['value'], train_dict['label'], valid_dict['index'],

@@ -75,9 +75,14 @@ The default code gives 0.8123 AUC if apply 90% sparsity on the DNN component and
 
 ```bash
 python main_all.py -l2 6e-7 -n_epochs 10 -warm 2 -prune 1 -sparse 0.90  -prune_deep 1 -prune_fm 1 -prune_r 1 -use_fwlw 1 -emb_r 0.444 -emb_corr 1. > ./logs/deepfwfm_l2_6e_7_prune_all_and_r_warm_2_sparse_0.90_emb_r_0.444_emb_corr_1
-```__
+```
 
 ## Useful python scripts
+
+Using Twitter dataset
+```bash
+python main_all.py -use_fm 0 -use_fwfm 1 -use_deep 1 -use_lw 1 -use_fwlw 1 -use_cuda 1 -n_epochs 1 -dataset twitter -twitter_category like 
+```
 
 Pruning
 ```bash
@@ -91,12 +96,12 @@ python main_all.py -use_fm 0 -use_fwfm 1 -use_deep 1 -use_lw 1 -use_fwlw 1 -use_
 
 Quantization for sparse models
 ```bash
-python quantization.py -use_deep 1 -use_fwfm 1 -n_epochs 3 -prune 1 -sparse 0.90 -use_fwlw 1 -save_model_name ./saved_models/full_pruned_DeepFwFM_l2_6e-07_sparse_0.9_seed_0 -dynamic_quantization 0 -quantization_aware 0 -static_quantization 1
+python quantization.py -use_deep 1 -use_fwfm 1 -n_epochs 3 -prune 1 -sparse 0.90 -use_fwlw 1 -save_model_path ./saved_models/full_pruned_DeepFwFM_l2_6e-07_sparse_0.9_seed_0 -dynamic_quantization 0 -quantization_aware 0 -static_quantization 1
 ```
 
 Quantization for QR Embeddings
 ```bash
-python quantization.py -use_deep 1 -use_fwfm 1 -use_lw 1 -use_fwlw 1 -n_epochs 3 -save_model_name ./saved_models/full_DeepFwFM_l2_3e-07_qr -dynamic_quantization 0 -quantization_aware 0 -static_quantization 1 -embedding_bag 1 -qr_flag 1
+python quantization.py -use_deep 1 -use_fwfm 1 -use_lw 1 -use_fwlw 1 -n_epochs 3 -save_model_path ./saved_models/full_DeepFwFM_l2_3e-07_qr -dynamic_quantization 0 -quantization_aware 0 -static_quantization 1 -embedding_bag 1 -qr_flag 1
 ```
 
 ## Preprocess full Twitter dataset
@@ -104,30 +109,17 @@ python quantization.py -use_deep 1 -use_fwfm 1 -use_lw 1 -use_fwlw 1 -n_epochs 3
 To download the full dataset, you can use the link below
 https://recsys-twitter.com/
 
-Move the file to the *./data/large* folder
+For preprocessing use this repository:
+https://github.com/pintonos/deeplearning/tree/main/RecSys2020/01_Preprocess
+
+It contains preprocessing according to the RecSys2020 winner features by RapidsAI.
+
+Move the preprocessed files to the *./data/large* folder
 
 Move to the data folder and process the raw data.
 ```bash
 $ python preprocess_twitter.py
 ```
-
-When the dataset is ready, you need to change the files in main_all.py as follows
-```py
-twitter_num_feat_dim = set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
-
-train_dict = data_preprocess.read_data('./data/large/train_twitter.csv', './data/large/twitter_feature_map',
-                                       twitter_num_feat_dim, feature_dim_start=1, dim=20)
-test_dict = data_preprocess.read_data('./data/large/valid_twitter.csv', './data/large/twitter_feature_map',
-                                      twitter_num_feat_dim, feature_dim_start=1, dim=20)
-
-model = DeepFMs.DeepFMs(field_size=20,...)
-```
-
-Then run with following parameter:
-```bash
-$ python main_all.py -... -numerical=15
-```
-
 
 ## Preprocess full Criteo dataset
 
