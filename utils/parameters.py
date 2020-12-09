@@ -47,6 +47,6 @@ def get_parser():
     parser.add_argument('-md_flag', default=0, type=int)
     parser.add_argument('-md_threshold', default=200, type=int)
     parser.add_argument('-twitter_category', default='like', type=str, choices=['reply', 'retweet', 'retweet_comment', 'like'])
-
+    parser.add_argument('-time_on_cuda', default=0, type=int)
 
     return parser

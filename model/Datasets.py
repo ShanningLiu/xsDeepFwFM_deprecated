@@ -3,6 +3,7 @@ import numpy as np
 from utils import data_preprocess
 import pickle
 
+
 class Dataset(torch.utils.data.Dataset):
     def __init__(self, X_index, X_value, labels, size):
         self.labels = labels
@@ -35,24 +36,26 @@ def get_dataset(pars):
     elif pars.dataset == 'twitter':
         field_size = 47
         pars.numerical = 11
-        train_dict = data_preprocess.read_data_twitter('./data/large/twitter_train_s.parquet', './data/large/twitter_feature_map_s',
-                                               twitter_num_feat_dim, feature_dim_start=4, dim=field_size,
-                                               twitter_category=pars.twitter_category)
-
-        valid_dict = data_preprocess.read_data_twitter('./data/large/twitter_valid_s.parquet', './data/large/twitter_feature_map_s',
-                                               twitter_num_feat_dim, feature_dim_start=4, dim=field_size,
-                                               twitter_category=pars.twitter_category)
+        train_dict = data_preprocess.read_data_twitter('./data/large/twitter_train_s.parquet',
+                                                       './data/large/twitter_feature_map_s',
+                                                       twitter_num_feat_dim, feature_dim_start=4, dim=field_size,
+                                                       twitter_category=pars.twitter_category)
+        valid_dict = data_preprocess.read_data_twitter('./data/large/twitter_valid_s.parquet',
+                                                       './data/large/twitter_feature_map_s',
+                                                       twitter_num_feat_dim, feature_dim_start=4, dim=field_size,
+                                                       twitter_category=pars.twitter_category)
+        test_dict = data_preprocess.read_data_twitter('./data/large/twitter_test_s.parquet',
+                                                       './data/large/twitter_feature_map_s',
+                                                       twitter_num_feat_dim, feature_dim_start=4, dim=field_size,
+                                                       twitter_category=pars.twitter_category)
 
     else:  # criteo dataset
         field_size = 39
-        '''train_dict = data_preprocess.read_data('./data/large/train_criteo_s.csv', './data/large/criteo_feature_map_s',
+        train_dict = data_preprocess.read_data('./data/large/criteo_train.csv', './data/large/criteo_feature_map',
                                                criteo_num_feat_dim, feature_dim_start=1, dim=39)
-        valid_dict = data_preprocess.read_data('./data/large/valid_criteo_s.csv', './data/large/criteo_feature_map_s',
-                                               criteo_num_feat_dim, feature_dim_start=1, dim=39)'''
-        train_dict = data_preprocess.get_feature_sizes('./data/large/full_criteo_feature_map',
-                                                       criteo_num_feat_dim, feature_dim_start=1, dim=39)
-        valid_dict = data_preprocess.read_data('./data/large/full_valid_criteo.csv',
-                                               './data/large/full_criteo_feature_map',
+        valid_dict = data_preprocess.read_data('./data/large/criteo_valid.csv', './data/large/criteo_feature_map',
+                                               criteo_num_feat_dim, feature_dim_start=1, dim=39)
+        test_dict = data_preprocess.read_data('./data/large/criteo_test.csv', './data/large/criteo_feature_map',
                                                criteo_num_feat_dim, feature_dim_start=1, dim=39)
 
-    return field_size, train_dict, valid_dict
+    return field_size, train_dict, valid_dict, test_dict

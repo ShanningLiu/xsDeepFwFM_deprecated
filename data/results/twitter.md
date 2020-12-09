@@ -1,0 +1,6 @@
+# Results for Twitter Dataset
+## Category: Like
+| Sparsity  | Embedding | Quantization  | # Deep Nodes  | LogLoss   | AUC       | PRAUC     | RCE   | # Parameters  | Size (MB) | Latency - Forwardpass (ms)    | Time 1 Batch (w)  |
+|-----------|-----------|---------------|---------------|-----------|-----------|-----------|-------|---------------|-----------|-------------------------------|-------------------|
+| 0         | Original  | None          | 400           | 0.3440660 | 0.9222552 | 0.8703    | 49.08 | 1,358,427     | 5.4538    | 0.00265                       | 1.20717           |
+| 0         | Original  | Dynamic       | 400           | 0.3440660 | 0.9222552 | 0.8703    | 49.08 | 1,358,427     | 5.4538    | 0.00265                       | 1.20717           |

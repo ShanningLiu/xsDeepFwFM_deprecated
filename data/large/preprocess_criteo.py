@@ -37,16 +37,21 @@ import random
 
 random.seed(0)
 
-def random_split(inputs, output1, valid):
+def random_split(inputs, output1, valid, test):
     fout1 = open(output1, 'w')
     fout2 = open(valid, 'w')
+    fout3 = open(test, 'w')
     for line in open(inputs):
         if random.uniform(0, 1) < 0.9:
             fout1.write(line)
         else:
-            fout2.write(line)
+            if random.uniform(0, 1) < 0.5:
+                fout2.write(line)
+            else:
+                fout3.write(line)
     fout1.close()
     fout2.close()
+    fout3.close()
 
 # https://github.com/WayneDW/AutoInt/blob/master/Dataprocess/Criteo/scale.py
 def scale(x):
@@ -153,22 +158,24 @@ def generate_valid_csv(inputs, valid_csv, feature_map):
         output_line = ','.join(output_line)
         fout.write(output_line + '\n')
 
-#file = 'G:\\dac\\train_ss.txt'
-file = 'C:\\Users\\AndreasPeintner\\Downloads\\dac\\train_ss.txt'
+file = 'G:\\dac\\train_ss.txt'
+#file = 'C:\\Users\\AndreasPeintner\\Downloads\\dac\\train_ss.txt'
+
 print('Split the orignal dataset into train and valid dataset.')
-random_split(file, 'train1.txt', 'valid.txt')
-#print('Count the frequency.')
-#freq_dict = cnt_freq_train('train1.txt')
+random_split(file, 'train1.txt', 'valid.txt', 'test.txt')
 
 # Not the best way, follow xdeepfm
-freq_dict = cnt_freq_train(file)
+print('Count the frequency.')
+freq_dict = cnt_freq_train('train1.txt')
 
 print('Generate the feature map and impute the training dataset.')
-feature_map = generate_feature_map_and_train_csv('train1.txt', 'train_criteo_ss.csv', 'criteo_feature_map_ss', freq_dict, threshold=8)
+feature_map = generate_feature_map_and_train_csv('train1.txt', 'criteo_train.csv', 'criteo_feature_map', freq_dict, threshold=8)
+
 print('Impute the valid dataset.')
-generate_valid_csv('valid.txt', 'valid_criteo_ss.csv', feature_map)
+generate_valid_csv('valid.txt', 'criteo_valid.csv', feature_map)
+generate_valid_csv('test.txt', 'criteo_test.csv', feature_map)
+
 print('Delete unnecessary files')
 os.remove('valid.txt')
+os.remove('test.txt')
 os.remove('train1.txt')
-
-#get_feature_size('train_shuffle.csv')

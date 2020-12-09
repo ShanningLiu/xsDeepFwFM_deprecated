@@ -884,8 +884,14 @@ class DeepFMs(torch.nn.Module):
     def print_size_of_model(self):
         torch.save(self.state_dict(), "temp.p")
         size = os.path.getsize("temp.p")
-        self.logger.info('\tSize (MB):' + str(size / 1e6))
+        self.logger.info('\tSize (MB):\t' + str(size / 1e6))
         os.remove('temp.p')
+
+        total_params = sum(p.numel() for p in self.parameters())
+        trainable_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
+        self.logger.info('\tTotal # Parameters:\t' + f'{total_params:,}')
+        self.logger.info('\tTrainable # Parameters:\t' + f'{trainable_params:,}')
+
         return size
 
     def run_benchmark(self, Xi, Xv, y, cuda=False, quantization_aware=False):
@@ -899,6 +905,8 @@ class DeepFMs(torch.nn.Module):
         loss, total_metric, prauc, rce = self.eval_by_batch(Xi, Xv, y, x_size)
         self.logger.info('\tLoss: ' + str(loss))
         self.logger.info('\tAcc: ' + str(total_metric))
+        self.logger.info('\tPRAUC: ' + str(prauc))
+        self.logger.info('\tRCE: ' + str(rce))
 
         #with torch.autograd.profiler.profile() as prof:
             #loss, total_metric, prauc, rce = self.eval_by_batch(Xi, Xv, y, x_size)
@@ -934,7 +942,23 @@ class DeepFMs(torch.nn.Module):
             end = time()
             time_spent.append(end - start)
 
-        self.logger.info('\tAvg execution time per forward (s): {:.5f}'.format(np.mean(time_spent)))
+        self.logger.info('\tAvg forward pass time per batch (s):\t{:.5f}'.format(np.mean(time_spent)))
+
+        time_spent = []
+        for i in range(500):
+            mini_batch_xi = Variable(torch.LongTensor(np.array([Xi[0:batch_size][i]])))
+            mini_batch_xv = Variable(torch.FloatTensor(np.array([Xv[0:batch_size][i]])))
+            if cuda:
+                mini_batch_xi, mini_batch_xv = mini_batch_xi.cuda(), mini_batch_xv.cuda()
+            start = time()
+            with torch.no_grad():
+                outputs = model(mini_batch_xi, mini_batch_xv)
+            if cuda:
+                torch.cuda.synchronize()
+            end = time()
+            time_spent.append(end - start)
+
+        self.logger.info('\tAvg forward pass time (s):\t{:.5f}'.format(np.mean(time_spent)))
 
     def fetch_teacher_outputs(self, teacher_model, Xi, Xv, x_size):
         teacher_model.eval()
@@ -1008,3 +1032,14 @@ class DeepFMs(torch.nn.Module):
             emb_l.append(EE)
 
         return emb_l
+
+    def __getstate__(self):
+        d = self.__dict__.copy()
+        if 'logger' in d:
+            d['logger'] = d['logger'].name
+        return d
+
+    def __setstate__(self, d):
+        if 'logger' in d:
+            d['logger'] = logging.getLogger(d['logger'])
+        self.__dict__.update(d)
