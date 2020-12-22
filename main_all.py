@@ -40,6 +40,7 @@ if __name__ == '__main__':
     field_size, train_dict, valid_dict, test_dict = get_dataset(pars)
 
     model = get_model(field_size=field_size, cuda=pars.use_cuda and torch.cuda.is_available(), feature_sizes=train_dict['feature_sizes'], pars=pars, logger=logger)
+    #summary(model, [(train_dict['index'].shape[1], 1), (train_dict['value'].shape[1], )], dtypes=[torch.long, torch.float], device=torch.device("cpu"))
 
     if pars.use_cuda and torch.cuda.is_available():
         torch.cuda.empty_cache()

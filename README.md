@@ -18,6 +18,8 @@ In this repository additional model compression and acceleration will be contuct
 
 4. Sklearn
 
+5. https://github.com/TylerYep/torch-summary
+
 ## Input Format
 
 This implementation requires the input data in the following format:

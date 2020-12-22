@@ -122,7 +122,7 @@ class DeepFMs(torch.nn.Module):
         self.target_sparse = sparse
         self.warm = warm
         self.num = numerical
-        self.embedding_bag = embedding_bag
+        self.embedding_bag = embedding_bag if not qr_flag else qr_flag  # qr needs embedding bag
         self.quantization_aware = quantization_aware
         self.static_quantization = static_quantization
         self.static_calibrate = static_calibrate
@@ -192,6 +192,8 @@ class DeepFMs(torch.nn.Module):
                 if self.md_flag or not self.embedding_bag:
                     self.fm_1st_embeddings = nn.ModuleList(
                         [nn.Embedding(feature_size, 1) for feature_size in self.feature_sizes])
+                    if self.static_quantization or self.quantization_aware:
+                        self.fm_1st_embeddings.qconfig = torch.quantization.float_qparams_weight_only_qconfig
                 else:
                     self.fm_1st_embeddings = self.create_emb(1, np.array(self.feature_sizes), sparse=False)
             if self.dropout_shallow:
@@ -202,6 +204,8 @@ class DeepFMs(torch.nn.Module):
                 else:
                     self.fm_2nd_embeddings = nn.ModuleList(
                         [nn.Embedding(feature_size, self.embedding_size) for feature_size in self.feature_sizes])
+                    if self.static_quantization or self.quantization_aware:
+                        self.fm_2nd_embeddings.qconfig = torch.quantization.float_qparams_weight_only_qconfig
                 if self.dropout_shallow:
                     self.fm_second_order_dropout = nn.Dropout(self.dropout_shallow[1])
 
@@ -221,11 +225,15 @@ class DeepFMs(torch.nn.Module):
             self.logger.info("Init ffm part")
             self.ffm_1st_embeddings = nn.ModuleList(
                 [nn.Embedding(feature_size, 1) for feature_size in self.feature_sizes])
+            if self.static_quantization or self.quantization_aware:
+                self.ffm_1st_embeddings.qconfig = torch.quantization.float_qparams_weight_only_qconfig
             if self.dropout_shallow:
                 self.ffm_first_order_dropout = nn.Dropout(self.dropout_shallow[0])
             self.ffm_2nd_embeddings = nn.ModuleList(
                 [nn.ModuleList([nn.Embedding(feature_size, self.embedding_size) for i in range(self.field_size)]) \
                  for feature_size in self.feature_sizes])
+            if self.static_quantization or self.quantization_aware:
+                self.ffm_2nd_embeddings.qconfig = torch.quantization.float_qparams_weight_only_qconfig
             if self.dropout_shallow:
                 self.ffm_second_order_dropout = nn.Dropout(self.dropout_shallow[1])
 
@@ -243,6 +251,8 @@ class DeepFMs(torch.nn.Module):
                     else:
                         self.fm_2nd_embeddings = nn.ModuleList(
                             [nn.Embedding(feature_size, self.embedding_size) for feature_size in self.feature_sizes])
+                        if self.static_quantization or self.quantization_aware:
+                            self.fm_2nd_embeddings.qconfig = torch.quantization.float_qparams_weight_only_qconfig
                 if self.is_deep_dropout:
                     setattr(self, 'net_' + str(nidx) + '_linear_0_dropout', nn.Dropout(self.dropout_deep[0]))
 
@@ -303,12 +313,14 @@ class DeepFMs(torch.nn.Module):
                 if self.embedding_bag:
                     fm_2nd_emb_arr = [(emb(Tzero).t() * Xv[:, i]).t() if i < self.num else emb(Xi[:, i - self.num, :]) for i, emb in enumerate(self.fm_2nd_embeddings)]
                 else:
-                    fm_2nd_emb_arr = [(torch.sum(emb(Tzero), 1).t() * Xv[:, i]).t() if i < self.num else torch.sum(emb(Xi[:, i - self.num, :]), 1) for i, emb in enumerate(self.fm_2nd_embeddings)]
+                    fm_2nd_emb_arr = [(torch.sum(emb(Tzero), 1).t() * Xv[:, i]).t() if i < self.num else torch.sum(
+                        emb(Xi[:, i - self.num, :].contiguous()), 1) for i, emb in enumerate(self.fm_2nd_embeddings)]
                 # convert a list of tensors to tensor
                 fm_second_order_tensor = torch.stack(fm_2nd_emb_arr)
                 if self.use_fwlw:
+                    # dequantize since einsum is not supported for quantization
                     if self.dynamic_quantization or (self.static_quantization and not self.static_calibrate) or (self.quantization_aware and not self.use_cuda):
-                        fwfm_linear = torch.einsum('ijk,ik->ijk', [fm_second_order_tensor, self.fwfm_linear.weight().dequantize()])
+                        fwfm_linear = torch.einsum('ijk,ik->ijk', [fm_second_order_tensor, self.dequant(self.fwfm_linear.weight())])
                     else:
                         fwfm_linear = torch.einsum('ijk,ik->ijk', [fm_second_order_tensor, self.fwfm_linear.weight])
                     fm_first_order = torch.einsum('ijk->ji', [fwfm_linear])
@@ -324,16 +336,7 @@ class DeepFMs(torch.nn.Module):
                 else:
                     # dequantize since einsum is not supported for quantization
                     if self.dynamic_quantization or (self.static_quantization and not self.static_calibrate) or (self.quantization_aware and not self.use_cuda):
-                        '''q_func = QFunctional()
-                        q_add = q_func.add(self.field_cov.weight().t(), self.field_cov.weight()) # without transpose better?
-                        q_add_mul = q_func.mul_scalar(q_add, 0.5)
-                        outer_fwfm = torch.einsum('klij,kl->klij', outer_fm, torch.dequantize(q_add_mul))'''
-                        ''''# better for loss:
-                        if hasattr(self.field_cov, '_packed_params') and self.field_cov._packed_params.dtype == torch.float16:
-                            outer_fwfm = torch.einsum('klij,kl->klij', outer_fm, (self.field_cov.weight().t() + self.field_cov.weight()) * 0.5)
-                        else:'''
-                        outer_fwfm = torch.einsum('klij,kl->klij', outer_fm, (self.field_cov.weight().dequantize().t() + self.field_cov.weight().dequantize()) * 0.5)
-
+                        outer_fwfm = torch.einsum('klij,kl->klij', outer_fm, (self.dequant(self.field_cov.weight()).t() + self.dequant(self.field_cov.weight())) * 0.5)
                     # time cost 3%
                     else:
                         outer_fwfm = torch.einsum('klij,kl->klij', outer_fm,
@@ -385,9 +388,7 @@ class DeepFMs(torch.nn.Module):
 
             if self.static_quantization or self.quantization_aware:
                 deep_emb = self.quant(deep_emb)
-                #deep_emb = torch.quantize_per_tensor(deep_emb, 0.1, 100, torch.quint8)
 
-            deep_embs = {}
             x_deeps = {}
             for nidx in range(1, self.num_deeps + 1):
                 if self.is_deep_dropout:

@@ -32,6 +32,8 @@ def get_dataset(pars):
                                                feature_dim_start=0, dim=field_size)
         valid_dict = data_preprocess.read_data('./data/tiny_test_input.csv', './data/category_emb', criteo_num_feat_dim,
                                                feature_dim_start=0, dim=field_size)
+        test_dict = data_preprocess.read_data('./data/tiny_test_input.csv', './data/category_emb', criteo_num_feat_dim,
+                                               feature_dim_start=0, dim=field_size)
 
     elif pars.dataset == 'twitter':
         field_size = 47
