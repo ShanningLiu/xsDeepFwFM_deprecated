@@ -1,23 +1,17 @@
 """
 Preprocess Criteo raw data
 
-Created by Wei Deng (deng106@purdue.edu) on Jun.13, 2019
-
-
 First, you can download the raw dataset dac.tar.gz using the link below
 http://labs.criteo.com/2014/02/kaggle-display-advertising-challenge-dataset/
 
 Unzip the raw data:
 >> tar xvzf dac.tar.gz
 
-Criteo data has 13 numerical fields and 26 category fields. 
-
-tiny_train_criteo.txt: The 1st column is label, and the rest are features.
-test.txt: All the column are features. We don't use it.
+Criteo data has 13 numerical fields and 26 category fields.
 
 In the training dataset
 
-Step 1, randomly split the training data into training and valid dataset
+Step 1, split data into 6 days for training set and last day into validation and test set
 
 Step 2, cnt_freq_train: count the frequency of features in each field;
         ignore data that has less than 40 columns (it consists of 47% of the whole dataset)
@@ -25,9 +19,7 @@ Step 2, cnt_freq_train: count the frequency of features in each field;
 Step 3, ignore_long_tail: set the long-tail features with frequency less than a threshold as 0; \
         generate the feature-map index, the columns are: field index, unique feature, mapped index
 
-In the valid dataset
-
-Map the known feature to existing index and set the unknown as 0.
+In the valid dataset map the known feature to existing index and set the unknown as 0.
 
 """
 
@@ -41,8 +33,11 @@ def random_split(inputs, output1, valid, test):
     fout1 = open(output1, 'w')
     fout2 = open(valid, 'w')
     fout3 = open(test, 'w')
-    for line in open(inputs):
-        if random.uniform(0, 1) < 0.9:
+
+    num_lines = sum(1 for line in open(inputs))
+
+    for line_number, line in enumerate(open(inputs)):
+        if line_number < num_lines - (num_lines // 7):
             fout1.write(line)
         else:
             if random.uniform(0, 1) < 0.5:
@@ -158,8 +153,8 @@ def generate_valid_csv(inputs, valid_csv, feature_map):
         output_line = ','.join(output_line)
         fout.write(output_line + '\n')
 
-file = 'G:\\dac\\train.txt'
-#file = 'C:\\Users\\AndreasPeintner\\Downloads\\dac\\train_ss.txt'
+#file = 'G:\\dac\\train.txt'
+file = 'C:\\Users\\AndreasPeintner\\Documents\\dac\\train_s.txt'
 
 # no test data with labels online available
 print('Split the orignal dataset into train and valid dataset.')

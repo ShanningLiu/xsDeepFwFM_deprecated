@@ -52,11 +52,12 @@ if __name__ == '__main__':
               prune=pars.prune, prune_fm=pars.prune_fm, prune_r=pars.prune_r, prune_deep=pars.prune_deep,
               save_path=save_model_name, emb_r=pars.emb_r, emb_corr=pars.emb_corr, early_stopping=False)
 
-    # measurement
+    # measurements
     model = get_model(field_size=field_size, cuda=pars.time_on_cuda, feature_sizes=train_dict['feature_sizes'], pars=pars, logger=logger)
     model = load_model_dic(model, save_model_name)
     if pars.time_on_cuda:
         model = model.cuda()
 
     model.print_size_of_model()
+    logger.info("TEST DATASET")
     model.run_benchmark(test_dict['index'], test_dict['value'], test_dict['label'], cuda=pars.time_on_cuda)
