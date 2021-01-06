@@ -3,6 +3,21 @@ from model import DeepFMs
 import numpy as np, gc
 import logging
 import sys
+import tqdm
+
+class TqdmLoggingHandler(logging.Handler):
+    def __init__(self, level=logging.NOTSET):
+        super().__init__(level)
+
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            tqdm.tqdm.write(msg)
+            self.flush()
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except:
+            self.handleError(record)
 
 def get_logger(filename=None):
     root = logging.getLogger('xsDeepFwFM')
@@ -19,6 +34,8 @@ def get_logger(filename=None):
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(formatter)
         root.addHandler(file_handler)
+
+    #root.addHandler(TqdmLoggingHandler(level=logging.DEBUG))
 
     root.propagate = False
 
@@ -51,9 +68,9 @@ def get_model(cuda, feature_sizes, pars, dynamic_quantization=False, static_quan
                            use_logit=pars.use_logit, random_seed=pars.random_seed,
                            quantization_aware=quantization_aware, dynamic_quantization=dynamic_quantization,
                            static_quantization=static_quantization, loss_type=pars.loss_type,
-                           embedding_bag=pars.embedding_bag,
-                           qr_flag=pars.qr_flag, qr_operation=pars.qr_operation, qr_collisions=pars.qr_collisions,
-                           qr_threshold=pars.qr_threshold, md_flag=pars.md_flag, md_threshold=pars.md_threshold, logger=logger)
+                           embedding_bag=pars.emb_bag,
+                           qr_flag=pars.qr_emb, qr_operation=pars.qr_operation, qr_collisions=pars.qr_collisions,
+                           qr_threshold=pars.qr_threshold, logger=logger)
 
 
 def save_memory(df):
@@ -76,6 +93,5 @@ def save_memory(df):
             gc.collect()
 
     gc.collect()
-    logger.info(df.dtypes)
 
     return df

@@ -37,8 +37,8 @@ if __name__ == '__main__':
     model = load_model_dic(model, pars.save_model_path)
 
     # student
-    number_of_deep_nodes = 32
-    h_depth = 1
+    number_of_deep_nodes = 400
+    h_depth = 2
     student = get_model(field_size=field_size, cuda=pars.use_cuda and torch.cuda.is_available(), feature_sizes=train_dict['feature_sizes'], deep_nodes=number_of_deep_nodes, h_depth=h_depth,
                         pars=pars, logger=logger)
 
@@ -67,6 +67,8 @@ if __name__ == '__main__':
     student = get_model(field_size=field_size, cuda=0, feature_sizes=train_dict['feature_sizes'], deep_nodes=number_of_deep_nodes, h_depth=h_depth,
                         pars=pars, logger=logger)
     student = load_model_dic(student, pars.save_model_path + '_kd')
+
     s = student.print_size_of_model()
     logger.info("\t{0:.2f} times smaller".format(f / s))
+
     student.run_benchmark(test_dict['index'], test_dict['value'], test_dict['label'])

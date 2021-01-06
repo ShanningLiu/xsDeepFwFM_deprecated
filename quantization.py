@@ -37,7 +37,7 @@ if __name__ == '__main__':
         model.cuda()
 
     logger.info('Original model:')
-    f = model.print_size_of_model()
+    model.print_size_of_model()
     #model.run_benchmark(test_dict['index'], test_dict['value'], test_dict['label'], cuda=pars.use_cuda)
 
     # dynamic quantization (no CUDA allowed and dynamic after training)
@@ -103,10 +103,7 @@ if __name__ == '__main__':
         # logger.info(quantized_model)
         logger.info("Post Static Quantization model:")
         logger.info("(--ignore number of parameters--)")
-        q = quantized_model.print_size_of_model()
-        logger.info("\t{0:.2f} times smaller".format(f / q))
-
-        quantized_model.eval_by_batch(Xi, Xv, y, x_size)
+        quantized_model.print_size_of_model()
         quantized_model.run_benchmark(test_dict['index'], test_dict['value'], test_dict['label'])
 
         torch.save(quantized_model.state_dict(), pars.save_model_path + '_static_quant')

@@ -37,9 +37,11 @@ def random_split(inputs, output1, valid, test):
     num_lines = sum(1 for line in open(inputs))
 
     for line_number, line in enumerate(open(inputs)):
+        # all except last day for training set
         if line_number < num_lines - (num_lines // 7):
             fout1.write(line)
         else:
+            # randomly split last day into validation and test set
             if random.uniform(0, 1) < 0.5:
                 fout2.write(line)
             else:
@@ -153,8 +155,8 @@ def generate_valid_csv(inputs, valid_csv, feature_map):
         output_line = ','.join(output_line)
         fout.write(output_line + '\n')
 
-#file = 'G:\\dac\\train.txt'
-file = 'C:\\Users\\AndreasPeintner\\Documents\\dac\\train_s.txt'
+file = 'G:\\dac\\train_ss.txt'
+#file = 'C:\\Users\\AndreasPeintner\\Documents\\dac\\train_s.txt'
 
 # no test data with labels online available
 print('Split the orignal dataset into train and valid dataset.')

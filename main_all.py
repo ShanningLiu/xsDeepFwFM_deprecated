@@ -27,16 +27,17 @@ if __name__ == '__main__':
 
     if pars.prune:
         save_model_name = save_model_name + '_sparse_' + str(pars.sparse) + '_seed_' + str(pars.random_seed)
-    if pars.qr_flag:
+    if pars.emb_bag and not pars.qr_emb:
+        save_model_name = save_model_name + '_emb_bag'
+    if pars.qr_emb:
         save_model_name = save_model_name + '_qr'
-    if pars.md_flag:
-        save_model_name = save_model_name + '_md'
 
     save_model_name = save_model_name + '_' + datetime.now().strftime("%Y%m%d%H%M%S")
 
     logger = get_logger(save_model_name[14:])
     logger.info(pars)
 
+    logger.info("GET DATASET")
     field_size, train_dict, valid_dict, test_dict = get_dataset(pars)
 
     model = get_model(field_size=field_size, cuda=pars.use_cuda and torch.cuda.is_available(), feature_sizes=train_dict['feature_sizes'], pars=pars, logger=logger)

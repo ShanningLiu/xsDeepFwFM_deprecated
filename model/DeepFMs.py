@@ -19,9 +19,11 @@ import os, sys, random
 import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.metrics import roc_auc_score, precision_recall_curve, auc, log_loss
+import timeit
 from time import time
 import math
 import logging
+from tqdm import trange
 
 import torch
 import torch.autograd as autograd
@@ -34,7 +36,6 @@ import torch.backends.cudnn
 from torch.nn.quantized import QFunctional, DeQuantize
 from torch.quantization import QuantStub, DeQuantStub
 
-from model.MDEmbeddingBag import PrEmbeddingBag
 from model.QREmbeddingBag import QREmbeddingBag
 
 """
@@ -291,7 +292,6 @@ class DeepFMs(torch.nn.Module):
         """
             fm/fwfm part
         """
-        t00 = time()
         if self.use_logit or self.use_fm or self.use_fwfm:
             # dim: embedding_size * batch * 1, time cost 47%
             Tzero = torch.zeros(Xi.shape[0], 1, dtype=torch.long)
@@ -590,7 +590,7 @@ class DeepFMs(torch.nn.Module):
                 elapsed_time = math.ceil(time() - loading_start)
                 logging.info("- Finished computing teacher outputs after {} secs..".format(elapsed_time))
 
-            for i in range(batch_iter + 1):
+            for i in trange(batch_iter + 1):
                 if epoch >= self.warm:
                     n_iter += 1
                 offset = i * self.batch_size
@@ -709,7 +709,7 @@ class DeepFMs(torch.nn.Module):
             non_zero_r = 0
             self.logger.info('========')
             for name, param in model.named_parameters():
-                num_total += (param != 0).sum().item()
+                num_total += (param != 0).sum().item()  #sum(p.numel() for p in self.parameters()) # TODO
                 if '1st_embeddings' in name:
                     num_1st_order_embeddings += (param != 0).sum().item()
                 if '2nd_embeddings' in name:
@@ -909,19 +909,22 @@ class DeepFMs(torch.nn.Module):
         self.logger.info('\tPRAUC: ' + str(prauc))
         self.logger.info('\tRCE: ' + str(rce))
 
-        #with torch.autograd.profiler.profile() as prof:
-            #loss, total_metric, prauc, rce = self.eval_by_batch(Xi, Xv, y, x_size)
-        #self.logger.info(prof.key_averages().table(sort_by="self_cpu_time_total"))
-
         model = self
+
+        if cuda:
+            model = model.cuda()
+
         if quantization_aware:
             model = self.to('cpu')
             model.use_cuda = False
             model = torch.quantization.convert(model.eval(), inplace=False)
 
         model.eval()
-        if cuda:
-            model.cuda()
+
+        # TODO
+        '''with torch.autograd.profiler.profile() as prof: 
+            loss, total_metric, prauc, rce = self.eval_by_batch(Xi, Xv, y, x_size)
+        self.logger.info(prof.key_averages().table(sort_by="self_cpu_time_total"))'''
 
         batch_size = 8192
         batch_iter = x_size // batch_size
@@ -935,31 +938,58 @@ class DeepFMs(torch.nn.Module):
             batch_xv = Variable(torch.FloatTensor(Xv[offset:end_offset]))
             if cuda:
                 batch_xi, batch_xv = batch_xi.cuda(), batch_xv.cuda()
-            start = time()
-            with torch.no_grad():
-                outputs = model(batch_xi, batch_xv)
-            if cuda:
-                torch.cuda.synchronize()
-            end = time()
-            time_spent.append(end - start)
 
-        self.logger.info('\tAvg forward pass time per batch (s):\t{:.5f}'.format(np.mean(time_spent)))
+                start = torch.cuda.Event(enable_timing=True)
+                end = torch.cuda.Event(enable_timing=True)
+
+                start.record()
+
+                model(batch_xi, batch_xv)
+
+                torch.cuda.synchronize()
+
+                t = start.elapsed_time(end) / 1000 # milliseconds to seconds
+
+            else:
+                start_time = time()
+                with torch.no_grad():
+                    _ = model(batch_xi, batch_xv)
+
+                t = time() - start_time
+
+            time_spent.append(t)
+
+        self.logger.info('\tAvg forward pass time per batch (ms):\t{:.3f}'.format(np.mean(time_spent) * 1000))
 
         time_spent = []
         for i in range(500):
             mini_batch_xi = Variable(torch.LongTensor(np.array([Xi[0:batch_size][i]])))
             mini_batch_xv = Variable(torch.FloatTensor(np.array([Xv[0:batch_size][i]])))
+
             if cuda:
                 mini_batch_xi, mini_batch_xv = mini_batch_xi.cuda(), mini_batch_xv.cuda()
-            start = time()
-            with torch.no_grad():
-                outputs = model(mini_batch_xi, mini_batch_xv)
-            if cuda:
-                torch.cuda.synchronize()
-            end = time()
-            time_spent.append(end - start)
 
-        self.logger.info('\tAvg forward pass time (s):\t{:.5f}'.format(np.mean(time_spent)))
+                start = torch.cuda.Event(enable_timing=True)
+                end = torch.cuda.Event(enable_timing=True)
+
+                start.record()
+
+                model(mini_batch_xi, mini_batch_xv)
+
+                torch.cuda.synchronize()
+
+                t = start.elapsed_time(end) / 1000  # milliseconds to seconds
+
+            else:
+                start_time = time()
+                with torch.no_grad():
+                    _ = model(mini_batch_xi, mini_batch_xv)
+
+                t = time() - start_time
+
+            time_spent.append(t)
+
+        self.logger.info('\tAvg forward pass time (ms):\t{:.3f}'.format(np.mean(time_spent) * 1000))
 
     def fetch_teacher_outputs(self, teacher_model, Xi, Xv, x_size):
         teacher_model.eval()
@@ -1005,16 +1035,6 @@ class DeepFMs(torch.nn.Module):
             if self.qr_flag and n > self.qr_threshold:
                 EE = QREmbeddingBag(n, m, self.qr_collisions,
                                     operation=self.qr_operation, mode="sum", sparse=sparse)
-            elif self.md_flag:
-                base = max(m)
-                _m = m[i] if n > self.md_threshold else base
-                EE = PrEmbeddingBag(n, _m, base)
-                # use np initialization as below for consistency...
-                W = np.random.uniform(
-                    low=-np.sqrt(1 / n), high=np.sqrt(1 / n), size=(n, _m)
-                ).astype(np.float32)
-                EE.embs.weight.data = torch.tensor(W, requires_grad=True)
-
             else:
                 EE = nn.EmbeddingBag(n, m, mode="sum", sparse=sparse)
 
