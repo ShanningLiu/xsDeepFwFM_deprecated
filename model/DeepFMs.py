@@ -31,6 +31,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.autograd import Variable
+import torch.nn.utils.prune
 
 import torch.backends.cudnn
 from torch.nn.quantized import QFunctional, DeQuantize
@@ -614,7 +615,7 @@ class DeepFMs(torch.nn.Module):
                 else:
                     loss = criterion(outputs, batch_y)
 
-                loss.backward()
+                loss.backward(retain_graph=prune)
                 optimizer.step()
 
                 total_loss += loss.data.item()
@@ -625,39 +626,23 @@ class DeepFMs(torch.nn.Module):
                     total_loss = 0.0
                     batch_begin_time = time()
 
+                # TODO test if correct etc
                 if prune and (i == batch_iter or i % 10 == 9) and epoch >= self.warm:
                     # adaptive increases faster in the early phase when the network is stable and slower in the late phase when the network becomes sensitive
                     self.adaptive_sparse = self.target_sparse * (1 - 0.99 ** (n_iter / 100.))
                     if prune_fm != 0:
-                        stacked_embeddings = []
-                        for name, param in model.named_parameters():
-                            if 'fm_2nd_embeddings' in name:
-                                stacked_embeddings.append(param.data)
-                        stacked_emb = torch.cat(stacked_embeddings, 0)
-                        emb_threshold = self.binary_search_threshold(stacked_emb.data, self.adaptive_sparse * emb_r,
-                                                                     np.prod(stacked_emb.data.shape))
-                    for name, param in model.named_parameters():
-                        if 'fm_2nd_embeddings' in name and prune_fm != 0:
-                            mask = abs(param.data) < emb_threshold
-                            param.data[mask] = 0
-                        if 'linear' in name and 'weight' in name and prune_deep != 0:
-                            layer_pars = np.prod(param.data.shape)
-                            threshold = self.binary_search_threshold(param.data, self.adaptive_sparse, layer_pars)
-                            mask = abs(param.data) < threshold
-                            param.data[mask] = 0
-                        if 'field_cov.weight' == name and prune_r != 0:
-                            layer_pars = np.prod(param.data.shape)
-                            symm_sum = 0.5 * (param.data + param.data.t())
-                            threshold = self.binary_search_threshold(symm_sum, self.adaptive_sparse * emb_corr,
-                                                                     layer_pars)
-                            mask = abs(symm_sum) < threshold
-                            param.data[mask] = 0
-                            # print (mask.sum().item(), layer_pars)
+                        for child in model.fm_2nd_embeddings.children():
+                            nn.utils.prune.ln_structured(child, name="weight", amount=self.adaptive_sparse * emb_r, n=2, dim=0)
+                    for name, module in model.named_modules():
+                        if 'linear' in name and not 'dropout' in name and prune_deep != 0:
+                            nn.utils.prune.ln_structured(module, name="weight", amount=self.adaptive_sparse, n=2, dim=0)
+                        if 'field_cov' == name and prune_r != 0:
+                            nn.utils.prune.ln_structured(module, name="weight", amount=self.adaptive_sparse * emb_corr, n=2, dim=0)
 
             # epoch evaluation metrics
             no_non_sparse = 0
             for name, param in model.named_parameters():
-                no_non_sparse += (param != 0).sum().item()
+                no_non_sparse += (param != 0).sum().item() # TODO new pruning method
             self.logger.info('Model parameters %d, sparse rate %.2f%%' % (no_non_sparse, 100 - no_non_sparse * 100. / num_total))
             train_loss, train_eval, train_prauc, train_rce = self.eval_by_batch(Xi_train, Xv_train, y_train, x_size)
             train_result.append(train_eval)
@@ -702,6 +687,18 @@ class DeepFMs(torch.nn.Module):
                     self.apply(torch.nn.intrinsic.qat.freeze_bn_stats)
 
         if prune: # summary
+            if prune_fm != 0:
+                for child in model.fm_2nd_embeddings.children():
+                    nn.utils.prune.remove(child, "weight")
+            for name, module in model.named_modules():
+                if 'linear' in name and not 'dropout' in name and prune_deep != 0:
+                    nn.utils.prune.remove(module, 'weight')
+                if 'field_cov' == name and prune_r != 0:
+                    nn.utils.prune.remove(module, 'weight')
+
+            if save_path:
+                torch.save(self.state_dict(), save_path)
+
             num_total = 0
             num_1st_order_embeddings = 0
             num_2nd_order_embeddings = 0
