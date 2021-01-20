@@ -1,11 +1,12 @@
 # -*- coding:utf-8 -*-
 
-
 """
 Created on Dec 10, 2017
 @author: jachin,Nie
 
-Edited by Wei Deng on Jun.7, 2019
+Edited by Wei Deng on Jun 7, 2019
+
+Edited by Andreas Peintner on Oct 2, 2021
 
 A pytorch implementation of deepfms including: FM, FFM, FwFM, DeepFM, DeepFFM, DeepFwFM
 
@@ -31,7 +32,6 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.autograd import Variable
-import torch.nn.utils.prune
 
 import torch.backends.cudnn
 from torch.nn.quantized import QFunctional, DeQuantize
@@ -564,12 +564,12 @@ class DeepFMs(torch.nn.Module):
             if 'field_cov.weight' == name:
                 symm_sum = 0.5 * (param.data + param.data.t())
                 non_zero_r = (symm_sum != 0).sum().item()
-        self.logger.info('Summation of feature sizes: %s' % (sum(self.feature_sizes)))
-        self.logger.info('Number of 1st order embeddings: %d' % (num_1st_order_embeddings))
-        self.logger.info('Number of 2nd order embeddings: %d' % (num_2nd_order_embeddings))
-        self.logger.info('Number of 2nd order interactions: %d' % (non_zero_r))
-        self.logger.info('Number of DNN parameters: %d' % (num_dnn))
-        self.logger.info("Number of total parameters: %d" % (num_total))
+        self.logger.info(f"Summation of feature sizes: {sum(self.feature_sizes):,}")
+        self.logger.info(f"Number of 1st order embeddings: {num_1st_order_embeddings:,}")
+        self.logger.info(f"Number of 2nd order embeddings: {num_2nd_order_embeddings:,}")
+        self.logger.info(f"Number of 2nd order interactions: {non_zero_r:,}")
+        self.logger.info(f"Number of DNN parameters: {num_dnn:,}" % (num_dnn))
+        self.logger.info(f"Number of total parameters: {num_total:,}")
         self.logger.info('========')
         num_total_original = num_total
 
@@ -615,7 +615,7 @@ class DeepFMs(torch.nn.Module):
                 else:
                     loss = criterion(outputs, batch_y)
 
-                loss.backward(retain_graph=prune)
+                loss.backward()
                 optimizer.step()
 
                 total_loss += loss.data.item()
@@ -626,23 +626,39 @@ class DeepFMs(torch.nn.Module):
                     total_loss = 0.0
                     batch_begin_time = time()
 
-                # TODO test if correct etc
                 if prune and (i == batch_iter or i % 10 == 9) and epoch >= self.warm:
                     # adaptive increases faster in the early phase when the network is stable and slower in the late phase when the network becomes sensitive
                     self.adaptive_sparse = self.target_sparse * (1 - 0.99 ** (n_iter / 100.))
                     if prune_fm != 0:
-                        for child in model.fm_2nd_embeddings.children():
-                            nn.utils.prune.ln_structured(child, name="weight", amount=self.adaptive_sparse * emb_r, n=2, dim=0)
-                    for name, module in model.named_modules():
-                        if 'linear' in name and not 'dropout' in name and prune_deep != 0:
-                            nn.utils.prune.ln_structured(module, name="weight", amount=self.adaptive_sparse, n=2, dim=0)
-                        if 'field_cov' == name and prune_r != 0:
-                            nn.utils.prune.ln_structured(module, name="weight", amount=self.adaptive_sparse * emb_corr, n=2, dim=0)
+                        stacked_embeddings = []
+                        for name, param in model.named_parameters():
+                            if 'fm_2nd_embeddings' in name:
+                                stacked_embeddings.append(param.data)
+                        stacked_emb = torch.cat(stacked_embeddings, 0)
+                        emb_threshold = self.binary_search_threshold(stacked_emb.data, self.adaptive_sparse * emb_r,
+                                                                     np.prod(stacked_emb.data.shape))
+                    for name, param in model.named_parameters():
+                        if 'fm_2nd_embeddings' in name and prune_fm != 0:
+                            mask = abs(param.data) < emb_threshold
+                            param.data[mask] = 0
+                        if 'linear' in name and 'weight' in name and prune_deep != 0:
+                            layer_pars = np.prod(param.data.shape)
+                            threshold = self.binary_search_threshold(param.data, self.adaptive_sparse, layer_pars)
+                            mask = abs(param.data) < threshold
+                            param.data[mask] = 0
+                        if 'field_cov.weight' == name and prune_r != 0:
+                            layer_pars = np.prod(param.data.shape)
+                            symm_sum = 0.5 * (param.data + param.data.t())
+                            threshold = self.binary_search_threshold(symm_sum, self.adaptive_sparse * emb_corr,
+                                                                     layer_pars)
+                            mask = abs(symm_sum) < threshold
+                            param.data[mask] = 0
+                            # print (mask.sum().item(), layer_pars)
 
             # epoch evaluation metrics
             no_non_sparse = 0
             for name, param in model.named_parameters():
-                no_non_sparse += (param != 0).sum().item() # TODO new pruning method
+                no_non_sparse += (param != 0).sum().item()
             self.logger.info('Model parameters %d, sparse rate %.2f%%' % (no_non_sparse, 100 - no_non_sparse * 100. / num_total))
             train_loss, train_eval, train_prauc, train_rce = self.eval_by_batch(Xi_train, Xv_train, y_train, x_size)
             train_result.append(train_eval)
@@ -687,18 +703,6 @@ class DeepFMs(torch.nn.Module):
                     self.apply(torch.nn.intrinsic.qat.freeze_bn_stats)
 
         if prune: # summary
-            if prune_fm != 0:
-                for child in model.fm_2nd_embeddings.children():
-                    nn.utils.prune.remove(child, "weight")
-            for name, module in model.named_modules():
-                if 'linear' in name and not 'dropout' in name and prune_deep != 0:
-                    nn.utils.prune.remove(module, 'weight')
-                if 'field_cov' == name and prune_r != 0:
-                    nn.utils.prune.remove(module, 'weight')
-
-            if save_path:
-                torch.save(self.state_dict(), save_path)
-
             num_total = 0
             num_1st_order_embeddings = 0
             num_2nd_order_embeddings = 0
@@ -706,7 +710,7 @@ class DeepFMs(torch.nn.Module):
             non_zero_r = 0
             self.logger.info('========')
             for name, param in model.named_parameters():
-                num_total += (param != 0).sum().item()  #sum(p.numel() for p in self.parameters()) # TODO
+                num_total += (param != 0).sum().item()
                 if '1st_embeddings' in name:
                     num_1st_order_embeddings += (param != 0).sum().item()
                 if '2nd_embeddings' in name:
@@ -716,13 +720,14 @@ class DeepFMs(torch.nn.Module):
                 if 'field_cov.weight' == name:
                     symm_sum = 0.5 * (param.data + param.data.t())
                     non_zero_r = (symm_sum != 0).sum().item()
-            self.logger.info('Number of pruned 1st order embeddings: %d' % (num_1st_order_embeddings))
-            self.logger.info('Number of pruned 2nd order embeddings: %d' % (num_2nd_order_embeddings))
-            self.logger.info('Number of pruned 2nd order interactions: %d' % (non_zero_r))
-            self.logger.info('Number of pruned DNN parameters: %d' % (num_dnn))
-            self.logger.info("Number of pruned total parameters: %d" % (num_total))
-            self.logger.info("Non pruned model parameters: \t%d" % (num_total_original))
-            self.logger.info("Difference: \t%d" % (num_total_original-num_total))
+            self.logger.info(f"Number of pruned 1st order embeddings: {num_1st_order_embeddings:,}")
+            self.logger.info(f"Number of pruned 2nd order embeddings: {num_2nd_order_embeddings:,}")
+            self.logger.info(f"Number of pruned 2nd order interactions: {non_zero_r:,}")
+            self.logger.info(f"Number of pruned DNN parameters: {num_dnn:,}")
+            self.logger.info(f"Number of pruned total parameters: {num_total:,}")
+            self.logger.info(f"Non pruned model parameters: \t{num_total_original:,}")
+            self.logger.info(f"Pruned Parameters: \t{num_total_original-num_total:,}")
+            self.logger.info('========')
 
     def eval_by_batch(self, Xi, Xv, y, x_size):
         if self.quantization_aware:
@@ -737,7 +742,7 @@ class DeepFMs(torch.nn.Module):
         if self.use_ffm:
             batch_size = 8192 * 2
         else:
-            batch_size = 4096 # TODO 8192
+            batch_size = 8192
         batch_iter = x_size // batch_size
         criterion = F.binary_cross_entropy_with_logits
         for i in range(batch_iter + 1):
@@ -880,21 +885,43 @@ class DeepFMs(torch.nn.Module):
         return self.eval_metric(y.cpu().data.numpy(), y_pred)
 
     def print_size_of_model(self):
+        self.logger.info('========')
+        self.logger.info('MODEL SIZE')
         torch.save(self.state_dict(), "temp.p")
         size = os.path.getsize("temp.p")
         self.logger.info('\tSize (MB):\t' + str(size / 1e6))
         os.remove('temp.p')
 
-        total_params = sum(p.numel() for p in self.parameters())
-        trainable_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
-        self.logger.info('\tTotal # Parameters:\t' + f'{total_params:,}')
-        self.logger.info('\tTrainable # Parameters:\t' + f'{trainable_params:,}')
+        num_total = 0
+        num_total_original = 0
+        num_1st_order_embeddings = 0
+        num_2nd_order_embeddings = 0
+        num_dnn = 0
+        for name, param in self.named_parameters():
+            num_total_original += np.prod(param.data.shape)
+            num_total += (param != 0).sum().item()
+            if '1st_embeddings' in name:
+                num_1st_order_embeddings += (param != 0).sum().item()
+            if '2nd_embeddings' in name:
+                num_2nd_order_embeddings += (param != 0).sum().item()
+            if 'linear_' in name:
+                num_dnn += (param != 0).sum().item()
+            if 'field_cov.weight' == name:
+                symm_sum = 0.5 * (param.data + param.data.t())
+                non_zero_r = (symm_sum != 0).sum().item()
+        self.logger.info(f"\tSummation of feature sizes: {sum(self.feature_sizes):,}")
+        self.logger.info(f"\tNumber of 1st order embeddings: {num_1st_order_embeddings:,}")
+        self.logger.info(f"\tNumber of 2nd order embeddings: {num_2nd_order_embeddings:,}")
+        self.logger.info(f"\tNumber of 2nd order interactions: {non_zero_r:,}")
+        self.logger.info(f"\tNumber of DNN parameters: {num_dnn:,}")
+        self.logger.info(f"\tNumber of total parameters: {num_total:,}")
+        self.logger.info(f"\tNon pruned model parameters: \t{num_total_original:,}")
+        self.logger.info(f"\tPruned Parameters: \t{num_total_original - num_total:,}")
+        self.logger.info('========')
 
         return size
 
     def run_benchmark(self, Xi, Xv, y, cuda=False, quantization_aware=False):
-        torch.set_num_threads(1)
-
         Xi = np.array(Xi).reshape((-1, self.field_size - self.num, 1))
         Xv = np.array(Xv)
         y = np.array(y)
@@ -907,9 +934,14 @@ class DeepFMs(torch.nn.Module):
         self.logger.info('\tRCE: ' + str(rce))
 
         model = self
+        torch.set_num_threads(1)
 
         if cuda:
+            model.use_cuda = True
             model = model.cuda()
+        else:
+            model.use_cuda = False
+            model = model.cpu()
 
         if quantization_aware:
             model = self.to('cpu')
