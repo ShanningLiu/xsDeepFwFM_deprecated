@@ -53,11 +53,11 @@ def get_dataset(pars):
 
     else:  # criteo dataset
         field_size = 39
-        train_dict = data_preprocess.read_data('./data/large/criteo_train.csv', './data/large/criteo_feature_map',
+        train_dict = data_preprocess.read_data('./data/large/criteo_train_s.csv', './data/large/criteo_feature_map_s',
                                                criteo_num_feat_dim, feature_dim_start=1, dim=39)
-        valid_dict = data_preprocess.read_data('./data/large/criteo_valid.csv', './data/large/criteo_feature_map',
+        valid_dict = data_preprocess.read_data('./data/large/criteo_valid_s.csv', './data/large/criteo_feature_map_s',
                                                criteo_num_feat_dim, feature_dim_start=1, dim=39)
-        test_dict = data_preprocess.read_data('./data/large/criteo_test.csv', './data/large/criteo_feature_map',
+        test_dict = data_preprocess.read_data('./data/large/criteo_test_s.csv', './data/large/criteo_feature_map_s',
                                                criteo_num_feat_dim, feature_dim_start=1, dim=39)
 
     return field_size, train_dict, valid_dict, test_dict

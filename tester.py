@@ -1,46 +1,73 @@
+from torch.nn.utils import prune
 import torch
+from model import DeepFMs
+from utils.util import get_model, load_model_dic, get_logger
+import time
 import numpy as np
-from torch.quantization import QuantStub, DeQuantStub, float_qparams_weight_only_qconfig, default_qconfig
+import torch
+from torch import nn
+import torch.nn.utils.prune as prune
+import torch.nn.functional as F
 
-
-class EmbeddingWithLinear(torch.nn.Module):
+class LeNet(nn.Module):
     def __init__(self):
-        super().__init__()
-        self.emb = torch.nn.Embedding(num_embeddings=50, embedding_dim=12)
-        self.fc = torch.nn.Linear(5, 5)
-        self.emb.qconfig = float_qparams_weight_only_qconfig
-        self.qconfig = default_qconfig # torch.quantization.get_default_qconfig('fbgemm')
-        self.quant = QuantStub()
-        self.dequant = DeQuantStub()
+        super(LeNet, self).__init__()
+        # 1 input image channel, 6 output channels, 3x3 square conv kernel
+        self.conv1 = nn.Conv2d(1, 6, 3)
+        self.conv2 = nn.Conv2d(6, 16, 3)
+        self.fc1 = nn.Linear(16 * 5 * 5, 120)  # 5x5 image dimension
+        self.fc2 = nn.Linear(120, 84)
+        self.fc3 = nn.Linear(84, 10)
 
-    def forward(self, indices, linear_in):
-        a = self.emb(indices)
-        x = self.quant(linear_in)
-        quant = self.fc(x)
-        return a, self.dequant(quant)
+    def forward(self, x):
+        x = F.max_pool2d(F.relu(self.conv1(x)), (2, 2))
+        x = F.max_pool2d(F.relu(self.conv2(x)), 2)
+        x = x.view(-1, int(x.nelement() / x.shape[0]))
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = self.fc3(x)
+        return x
 
 
-# create a model instance
-model_fp32 = EmbeddingWithLinear()
+def computeTime(model):
+    inputs = torch.randn(256, 1, 28, 28)
 
-# input data
-#indices_fp32 = torch.LongTensor(2, 1).random_(0, 10)
-indices_fp32 = torch.empty(2, 1, dtype=torch.long)
-input_fp32 = torch.randn(2, 5)
+    model.eval()
 
-# original result
-model_fp32.eval()
-res = model_fp32(indices_fp32, input_fp32)
-print(res)
+    i = 0
+    time_spent = []
+    while i < 100:
+        start_time = time.time()
+        with torch.no_grad():
+            _ = model(inputs)
+        if i != 0:
+            time_spent.append(time.time() - start_time)
+        i += 1
+    print('Avg execution time (ms): {:.3f}'.format(np.mean(time_spent)))
 
-# prepare model
-model_fp32_prepared = torch.quantization.prepare(model_fp32)
-print(model_fp32_prepared)
+logger = get_logger()
+model = LeNet()#DeepFMs.DeepFMs(field_size=23, feature_sizes=[1], logger=logger)
 
-# calibration
-model_fp32_prepared(indices_fp32, input_fp32)
+no_non_sparse = 0
+for name, param in model.named_parameters():
+    no_non_sparse += (param != 0).sum().item()
+print(no_non_sparse)
+computeTime(model)
 
-#convertion
-model_int8 = torch.quantization.convert(model_fp32_prepared)
-res = model_int8(indices_fp32, input_fp32)
-print(res)
+prune.ln_structured(model.fc1, name="weight", amount=0.5, n=2, dim=0)
+prune.remove(model.fc1, 'weight')
+
+no_non_sparse = 0
+for name, param in model.named_parameters():
+    no_non_sparse += (param != 0).sum().item()
+print(no_non_sparse)
+state_dict = model.state_dict()
+print(state_dict.keys())
+
+model = LeNet()#DeepFMs.DeepFMs(field_size=23, feature_sizes=[1], logger=logger)
+model.load_state_dict(state_dict)
+no_non_sparse = 0
+for name, param in model.named_parameters():
+    no_non_sparse += (param != 0).sum().item()
+print(no_non_sparse)
+computeTime(model)

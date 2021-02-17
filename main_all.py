@@ -55,7 +55,7 @@ if __name__ == '__main__':
 
     # measurements
     model = get_model(field_size=field_size, cuda=pars.time_on_cuda, feature_sizes=train_dict['feature_sizes'], pars=pars, logger=logger)
-    model = load_model_dic(model, save_model_name)
+    model = load_model_dic(model, save_model_name, sparse=pars.prune)
     if pars.time_on_cuda:
         model = model.cuda()
 
