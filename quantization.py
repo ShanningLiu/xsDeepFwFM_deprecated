@@ -38,7 +38,7 @@ if __name__ == '__main__':
 
     logger.info('Original model:')
     model.print_size_of_model()
-    #model.run_benchmark(test_dict['index'], test_dict['value'], test_dict['label'], cuda=pars.use_cuda)
+    model.run_benchmark(test_dict['index'], test_dict['value'], test_dict['label'], cuda=pars.use_cuda)
 
     # dynamic quantization (no CUDA allowed and dynamic after training)
     # https://pytorch.org/tutorials/recipes/recipes/dynamic_quantization.html
@@ -64,10 +64,11 @@ if __name__ == '__main__':
         torch.save(quantized_model.state_dict(), pars.save_model_path + '_dynamic_quant')
 
     # most commonly used form of quantization
-    # embedding quantization in pytorch 1.7?
+    # embedding quantization in pytorch 1.7.1
     # Support for FP16 quantization
     # Embedding and EmbeddingBag quantization (8-bit + partial support for 4-bit)
     # https://discuss.pytorch.org/t/is-it-planned-to-support-nn-embeddings-quantization/89154
+    # https://github.com/pytorch/pytorch/issues/41396
     if pars.static_quantization:  # https://pytorch.org/tutorials/advanced/static_quantization_tutorial.html
         quantized_model = load_model_dic(
             get_model(field_size=field_size, cuda=0, feature_sizes=train_dict['feature_sizes'],
@@ -77,6 +78,11 @@ if __name__ == '__main__':
         quantized_model.qconfig = torch.quantization.get_default_qconfig('fbgemm')
         #quantized_model.qconfig = torch.quantization.get_default_qconfig('qnnpack')
         #quantized_model.qconfig = torch.quantization.default_qconfig
+
+        quantized_model = torch.quantization.fuse_modules(quantized_model,
+                                                     [['net_1_linear_1', 'net_1_linear_1_relu'],
+                                                      ['net_1_linear_2', 'net_1_linear_2_relu'],
+                                                      ['net_1_linear_3', 'net_1_linear_3_relu']])
 
         torch.quantization.prepare(quantized_model, inplace=True)
 
@@ -102,9 +108,8 @@ if __name__ == '__main__':
 
         # logger.info(quantized_model)
         logger.info("Post Static Quantization model:")
-        logger.info("(--ignore number of parameters--)")
         quantized_model.print_size_of_model()
-        quantized_model.run_benchmark(test_dict['index'], test_dict['value'], test_dict['label'])
+        quantized_model.run_benchmark(test_dict['index'], test_dict['value'], test_dict['label'], cuda=pars.use_cuda)
 
         torch.save(quantized_model.state_dict(), pars.save_model_path + '_static_quant')
 

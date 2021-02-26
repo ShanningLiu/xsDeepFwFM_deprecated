@@ -61,4 +61,4 @@ if __name__ == '__main__':
 
     model.print_size_of_model()
     logger.info("TEST DATASET")
-    model.run_benchmark(test_dict['index'], test_dict['value'], test_dict['label'], cuda=pars.time_on_cuda)
+    model.run_benchmark(test_dict['index'], test_dict['value'], test_dict['label'], batch_size=8192, cuda=pars.time_on_cuda)

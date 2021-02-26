@@ -21,9 +21,9 @@ In this repository additional model compression and acceleration will be conduct
 
 ## Environment
 
-1. Python 3
+1. Python 3.7
 
-2. PyTorch
+2. PyTorch 1.7.1
 
 3. Pandas
 
