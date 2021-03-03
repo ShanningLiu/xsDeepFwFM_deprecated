@@ -61,4 +61,26 @@ if __name__ == '__main__':
 
     model.print_size_of_model()
     logger.info("TEST DATASET")
-    model.run_benchmark(test_dict['index'], test_dict['value'], test_dict['label'], batch_size=8192, cuda=pars.time_on_cuda)
+    #model.run_benchmark(test_dict['index'], test_dict['value'], test_dict['label'], batch_size=8192, cuda=pars.time_on_cuda)
+
+    Xi = np.array(test_dict['index']).reshape((-1, model.field_size - model.num, 1))
+    Xv = np.array(test_dict['value'])
+    batch_xi = torch.autograd.Variable(torch.LongTensor(Xi[0:8192]))
+    batch_xv = torch.autograd.Variable(torch.FloatTensor(Xv[0:8192]))
+    mini_batch_xi = torch.autograd.Variable(torch.LongTensor(Xi[0:1]))
+    mini_batch_xv = torch.autograd.Variable(torch.FloatTensor(Xv[0:1]))
+
+    mini_batch_xi = mini_batch_xi.to(device='cpu', dtype=torch.long)
+    mini_batch_xv = mini_batch_xv.to(device='cpu', dtype=torch.float)
+
+    model.cpu()
+    model.eval()
+
+    with torch.no_grad(): # warmup
+        _ = model(batch_xi, batch_xv)
+
+    with torch.no_grad():
+        with torch.autograd.profiler.profile(use_cuda=False) as prof:
+            _ = model(mini_batch_xi, mini_batch_xv)
+    logger.info(prof.key_averages().table(sort_by="self_cpu_time_total"))
+

@@ -1,4 +1,4 @@
-# Results for Criteo Dataset (10% size) (measurements on test set)
+# Results for Criteo Dataset (10% size) (measurements on test set) (1 Epoch)
 
 | Sparsity  | Embedding     | Quantization  | # Deep Nodes  | LogLoss   | AUC    | PRAUC     | RCE   | # Parameters  | Size (MB) | Latency - Forwardpass (ms)    | Time Batch (8192) (CPU) (1-Thread) (ms)   |  Time Batch (8192) (CUDA) (ms)    |
 |-----------|---------------|---------------|---------------|-----------|--------|-----------|-------|---------------|-----------|-------------------------------|-------------------------------------------|-----------------------------------|

@@ -298,25 +298,27 @@ class DeepFMs(torch.nn.Module):
                 if self.use_cuda:
                     Tzero = Tzero.cuda()
                 if not self.use_fwlw:
-                    if self.embedding_bag:
-                        fm_1st_emb_arr = [(emb(Tzero).t() * Xv[:, i]).t() if i < self.num else emb(Xi[:, i - self.num, :]) for i, emb in enumerate(self.fm_1st_embeddings)]
-                    else:
-                        fm_1st_emb_arr = [(torch.sum(emb(Tzero), 1).t() * Xv[:, i]).t() if i < self.num else torch.sum(emb(Xi[:, i - self.num, :]), 1) for i, emb in enumerate(self.fm_1st_embeddings)]
+                    with profiler.record_function("FM 1st"):
+                        if self.embedding_bag:
+                            fm_1st_emb_arr = [(emb(Tzero).t() * Xv[:, i]).t() if i < self.num else emb(Xi[:, i - self.num, :]) for i, emb in enumerate(self.fm_1st_embeddings)]
+                        else:
+                            fm_1st_emb_arr = [(torch.sum(emb(Tzero), 1).t() * Xv[:, i]).t() if i < self.num else torch.sum(emb(Xi[:, i - self.num, :]), 1) for i, emb in enumerate(self.fm_1st_embeddings)]
 
-                    # dim: batch_size * field_size
-                    fm_first_order = torch.cat(fm_1st_emb_arr, 1)
-                    if self.is_shallow_dropout:
-                        fm_first_order = self.fm_first_order_dropout(fm_first_order)
-                    # self.logger.info(fm_first_order.shape, "old linear")
+                        # dim: batch_size * field_size
+                        fm_first_order = torch.cat(fm_1st_emb_arr, 1)
+                        if self.is_shallow_dropout:
+                            fm_first_order = self.fm_first_order_dropout(fm_first_order)
+                        # self.logger.info(fm_first_order.shape, "old linear")
                 # dim: field_size * batch_size * embedding_size, time cost 43%
                 if self.use_fm or self.use_fwfm:
-                    if self.embedding_bag:
-                        fm_2nd_emb_arr = [(emb(Tzero).t() * Xv[:, i]).t() if i < self.num else emb(Xi[:, i - self.num, :].contiguous()) for i, emb in enumerate(self.fm_2nd_embeddings)]
-                    else:
-                        fm_2nd_emb_arr = [(torch.sum(emb(Tzero), 1).t() * Xv[:, i]).t() if i < self.num else torch.sum(
-                            emb(Xi[:, i - self.num, :].contiguous()), 1) for i, emb in enumerate(self.fm_2nd_embeddings)]
-                    # convert a list of tensors to tensor
-                    fm_second_order_tensor = torch.stack(fm_2nd_emb_arr)
+                    with profiler.record_function("FM 2nd"):
+                        if self.embedding_bag:
+                            fm_2nd_emb_arr = [(emb(Tzero).t() * Xv[:, i]).t() if i < self.num else emb(Xi[:, i - self.num, :].contiguous()) for i, emb in enumerate(self.fm_2nd_embeddings)]
+                        else:
+                            fm_2nd_emb_arr = [(torch.sum(emb(Tzero), 1).t() * Xv[:, i]).t() if i < self.num else torch.sum(
+                                emb(Xi[:, i - self.num, :].contiguous()), 1) for i, emb in enumerate(self.fm_2nd_embeddings)]
+                        # convert a list of tensors to tensor
+                        fm_second_order_tensor = torch.stack(fm_2nd_emb_arr)
                     if self.use_fwlw:
                         # dequantize since einsum is not supported for quantization
                         with profiler.record_function("FM FW LW"):
@@ -955,7 +957,7 @@ class DeepFMs(torch.nn.Module):
 
         with torch.autograd.profiler.profile(use_cuda=cuda, profile_memory=True) as prof:
             _ = self.eval_by_batch(Xi, Xv, y, x_size)
-        self.logger.info(prof.key_averages().table(sort_by="self_cpu_time_total"))#[:1191])
+        self.logger.info(prof.key_averages().table(sort_by="self_cpu_time_total"))
         prof.export_chrome_trace("trace.json")
 
         batch_iter = x_size // batch_size

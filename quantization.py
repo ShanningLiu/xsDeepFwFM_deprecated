@@ -109,7 +109,7 @@ if __name__ == '__main__':
         # logger.info(quantized_model)
         logger.info("Post Static Quantization model:")
         quantized_model.print_size_of_model()
-        quantized_model.run_benchmark(test_dict['index'], test_dict['value'], test_dict['label'], cuda=pars.use_cuda)
+        quantized_model.run_benchmark(test_dict['index'], test_dict['value'], test_dict['label'], batch_size=1, cuda=pars.use_cuda)
 
         torch.save(quantized_model.state_dict(), pars.save_model_path + '_static_quant')
 

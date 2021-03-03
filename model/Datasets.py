@@ -21,11 +21,11 @@ class Dataset(torch.utils.data.Dataset):
         return Xi_i, Xv_i, y
 
 
-def get_dataset(pars):
+def get_dataset(pars, dataset=None):
     criteo_num_feat_dim = set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
     twitter_num_feat_dim = set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
 
-    if pars.dataset == 'tiny-criteo':
+    if dataset == 'tiny-criteo' or pars.dataset == 'tiny-criteo':
         field_size = 39
         train_dict = data_preprocess.read_data('./data/tiny_train_input.csv', './data/category_emb',
                                                criteo_num_feat_dim,

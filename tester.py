@@ -1,73 +1,83 @@
-from torch.nn.utils import prune
 import torch
-from model import DeepFMs
-from utils.util import get_model, load_model_dic, get_logger
-import time
 import numpy as np
-import torch
-from torch import nn
-import torch.nn.utils.prune as prune
+from torch.nn.quantized import QFunctional
+from torch.quantization import QuantStub, DeQuantStub, default_qconfig
 import torch.nn.functional as F
+import torch.nn as nn
 
-class LeNet(nn.Module):
+
+class EmbeddingWithLinear(torch.nn.Module):
     def __init__(self):
-        super(LeNet, self).__init__()
-        # 1 input image channel, 6 output channels, 3x3 square conv kernel
-        self.conv1 = nn.Conv2d(1, 6, 3)
-        self.conv2 = nn.Conv2d(6, 16, 3)
-        self.fc1 = nn.Linear(16 * 5 * 5, 120)  # 5x5 image dimension
-        self.fc2 = nn.Linear(120, 84)
-        self.fc3 = nn.Linear(84, 10)
+        super().__init__()
+        self.emb = torch.nn.Embedding(num_embeddings=512, embedding_dim=10)
+        self.emb.qconfig = torch.quantization.float_qparams_weight_only_qconfig
+        self.emb_bag = torch.nn.EmbeddingBag(num_embeddings=512, embedding_dim=10, mode='sum')
+        self.emb_bag.qconfig = torch.quantization.float_qparams_weight_only_qconfig
+        self.layers = nn.Sequential(
+            nn.Linear(10, 400),
+            nn.ReLU(),
+            nn.Linear(400, 400),
+            nn.ReLU(),
+            nn.Linear(400, 1)
+        )
+        #self.emb.qconfig = float_qparams_weight_only_qconfig
+        #self.emb_bag.qconfig = float_qparams_weight_only_qconfig
 
-    def forward(self, x):
-        x = F.max_pool2d(F.relu(self.conv1(x)), (2, 2))
-        x = F.max_pool2d(F.relu(self.conv2(x)), 2)
-        x = x.view(-1, int(x.nelement() / x.shape[0]))
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
-        return x
+        self.qconfig = default_qconfig #torch.quantization.get_default_qconfig('fbgemm')
+        self.quant = QuantStub()
+        self.dequant = DeQuantStub()
+
+    def forward(self, input):
+        #z = self.emb_bag(input.T.contiguous())
+
+        x = self.emb(input)
+        #x = torch.sum(x, dim=0)
+
+        fm_input = x
+        square_of_sum = torch.pow(torch.sum(fm_input, dim=1, keepdim=True), 2)
+        sum_of_square = torch.sum(fm_input * fm_input, dim=1, keepdim=True)
+        cross_term = square_of_sum - sum_of_square
+        cross_term = 0.5 * torch.sum(cross_term, dim=2, keepdim=False)
+
+        x = self.quant(x)
+        x = torch.sigmoid(self.layers(x))
+        x = self.dequant(x)
+
+        return cross_term
 
 
-def computeTime(model):
-    inputs = torch.randn(256, 1, 28, 28)
+# create a model instance
+model_fp32 = EmbeddingWithLinear()
+input_fp32 = torch.randint(512, (2048, 39))
+#input_fp32 = torch.randn(1, 39, 10)
 
-    model.eval()
+model_fp32.eval()
+_ = model_fp32(input_fp32) # warmup
+with torch.autograd.profiler.profile() as prof:
+        _ = model_fp32(input_fp32)
+print(prof.key_averages().table(sort_by="self_cpu_time_total"))
 
-    i = 0
-    time_spent = []
-    while i < 100:
-        start_time = time.time()
-        with torch.no_grad():
-            _ = model(inputs)
-        if i != 0:
-            time_spent.append(time.time() - start_time)
-        i += 1
-    print('Avg execution time (ms): {:.3f}'.format(np.mean(time_spent)))
+model_fp32_prepared = torch.quantization.prepare(model_fp32)
+model_fp32_prepared(input_fp32)
 
-logger = get_logger()
-model = LeNet()#DeepFMs.DeepFMs(field_size=23, feature_sizes=[1], logger=logger)
+model_int8 = torch.quantization.convert(model_fp32_prepared)
 
-no_non_sparse = 0
-for name, param in model.named_parameters():
-    no_non_sparse += (param != 0).sum().item()
-print(no_non_sparse)
-computeTime(model)
+#model_int8 = torch.quantization.quantize(model_fp32, run_fn=model_fp32.forward, run_args=input_fp32, mapping=None, inplace=False)
 
-prune.ln_structured(model.fc1, name="weight", amount=0.5, n=2, dim=0)
-prune.remove(model.fc1, 'weight')
+_ = model_int8(input_fp32) # warmup
+with torch.autograd.profiler.profile() as prof:
+    _ = model_int8(input_fp32)
+print(prof.key_averages().table(sort_by="self_cpu_time_total"))
 
-no_non_sparse = 0
-for name, param in model.named_parameters():
-    no_non_sparse += (param != 0).sum().item()
-print(no_non_sparse)
-state_dict = model.state_dict()
-print(state_dict.keys())
+prof.export_chrome_trace("trace.json")
 
-model = LeNet()#DeepFMs.DeepFMs(field_size=23, feature_sizes=[1], logger=logger)
-model.load_state_dict(state_dict)
-no_non_sparse = 0
-for name, param in model.named_parameters():
-    no_non_sparse += (param != 0).sum().item()
-print(no_non_sparse)
-computeTime(model)
+
+'''
+Findings:
+- EmbeddingBags always faster (non quant AND with quant)
+- EmbeddingBags better for quantization
+- PyTorch 1.7.1 faster than 1.6
+- default qconfig faster than fbgemm in this test case
+- warmup important for both models
+- deepfwfm benchmark with cpp uses only 1 sample
+'''
