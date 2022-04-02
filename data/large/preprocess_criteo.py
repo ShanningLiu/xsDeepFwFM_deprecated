@@ -155,7 +155,7 @@ def generate_valid_csv(inputs, valid_csv, feature_map):
         output_line = ','.join(output_line)
         fout.write(output_line + '\n')
 
-file = 'G:\\dac\\train_s.txt'
+file = '/Users/liushanning/Desktop/2516/xsDeepFwFM_deprecated/data/large/dac/train.txt'
 #file = 'C:\\Users\\AndreasPeintner\\Documents\\dac\\train_s.txt'
 
 # no test data with labels online available

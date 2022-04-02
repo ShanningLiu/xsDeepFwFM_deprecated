@@ -63,8 +63,7 @@ def generate_feature_map_and_train_csv(inputs, train_csv, file_feature_map, freq
         feature_map.append(col_map)
 
     for i, col_map in enumerate(feature_map[len(dense_features) + 1:]):
-        inputs[inputs.columns[i + len(dense_features) + 1]] = inputs[inputs.columns[i + len(dense_features) + 1]].map(
-            col_map)
+        inputs[inputs.columns[i + len(dense_features) + 1]] = inputs[inputs.columns[i + len(dense_features) + 1]].map(col_map)
 
     inputs.fillna(0, inplace=True)
     inputs = save_memory(inputs)

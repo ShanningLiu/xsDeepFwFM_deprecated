@@ -24,6 +24,7 @@ class Dataset(torch.utils.data.Dataset):
 def get_dataset(pars):
     criteo_num_feat_dim = set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
     twitter_num_feat_dim = set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
+    ali_num_feat_dim = set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16])
 
     if pars.dataset == 'tiny-criteo':
         field_size = 39
@@ -33,7 +34,7 @@ def get_dataset(pars):
         valid_dict = data_preprocess.read_data('./data/tiny_test_input.csv', './data/category_emb', criteo_num_feat_dim,
                                                feature_dim_start=0, dim=field_size)
         test_dict = data_preprocess.read_data('./data/tiny_test_input.csv', './data/category_emb', criteo_num_feat_dim,
-                                               feature_dim_start=0, dim=field_size)
+                                              feature_dim_start=0, dim=field_size)
 
     elif pars.dataset == 'twitter':
         field_size = 47
@@ -47,17 +48,26 @@ def get_dataset(pars):
                                                        twitter_num_feat_dim, feature_dim_start=4, dim=field_size,
                                                        twitter_category=pars.twitter_category)
         test_dict = data_preprocess.read_data_twitter('./data/large/twitter_test_s.parquet',
-                                                       './data/large/twitter_feature_map_s',
-                                                       twitter_num_feat_dim, feature_dim_start=4, dim=field_size,
-                                                       twitter_category=pars.twitter_category)
+                                                      './data/large/twitter_feature_map_s',
+                                                      twitter_num_feat_dim, feature_dim_start=4, dim=field_size,
+                                                      twitter_category=pars.twitter_category)
+
+    elif pars.dataset == 'ali':
+        field_size = 21
+        train_dict = data_preprocess.read_data_ali('./data/large/ali_train.csv', './data/large/ali_feature_map',
+                                                   ali_num_feat_dim, feature_dim_start=1, dim=21)
+        valid_dict = data_preprocess.read_data_ali('./data/large/ali_valid.csv', './data/large/ali_feature_map',
+                                                   ali_num_feat_dim, feature_dim_start=1, dim=21)
+        test_dict = data_preprocess.read_data_ali('./data/large/ali_test.csv', './data/large/ali_feature_map',
+                                                  ali_num_feat_dim, feature_dim_start=1, dim=21)
 
     else:  # criteo dataset
         field_size = 39
-        train_dict = data_preprocess.read_data('./data/large/criteo_train_s.csv', './data/large/criteo_feature_map_s',
+        train_dict = data_preprocess.read_data('./data/large/criteo_train.csv', './data/large/criteo_feature_map',
                                                criteo_num_feat_dim, feature_dim_start=1, dim=39)
-        valid_dict = data_preprocess.read_data('./data/large/criteo_valid_s.csv', './data/large/criteo_feature_map_s',
+        valid_dict = data_preprocess.read_data('./data/large/criteo_valid.csv', './data/large/criteo_feature_map',
                                                criteo_num_feat_dim, feature_dim_start=1, dim=39)
-        test_dict = data_preprocess.read_data('./data/large/criteo_test_s.csv', './data/large/criteo_feature_map_s',
-                                               criteo_num_feat_dim, feature_dim_start=1, dim=39)
+        test_dict = data_preprocess.read_data('./data/large/criteo_test.csv', './data/large/criteo_feature_map',
+                                              criteo_num_feat_dim, feature_dim_start=1, dim=39)
 
     return field_size, train_dict, valid_dict, test_dict

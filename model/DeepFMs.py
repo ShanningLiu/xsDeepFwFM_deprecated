@@ -510,6 +510,7 @@ class DeepFMs(torch.nn.Module):
         if self.verbose:
             self.logger.info("pre_process data ing...")
         is_valid = False
+        print(Xi_train)
         Xi_train = np.array(Xi_train).reshape((-1, self.field_size - self.num, 1))
         Xv_train = np.array(Xv_train)
         y_train = np.array(y_train)

@@ -1,7 +1,6 @@
 import random
 import numpy as np
 import torch
-from torchsummary import summary
 from tqdm import trange
 
 from model import DeepFMs

@@ -1,1 +1,5 @@
 /saved_models/
+/logs/
+/data/
+!/data/large/*.py
+/archive
