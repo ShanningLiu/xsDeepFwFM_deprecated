@@ -1,5 +1,7 @@
 /saved_models/
 /logs/
-/data/
 /archive
-!/data/large/*.py
+.DS_Store
+/data/large/dac/
+/data/large/*.csv
+/data/large/*_feature_map
