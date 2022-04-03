@@ -53,13 +53,14 @@ def get_dataset(pars):
                                                       twitter_category=pars.twitter_category)
 
     elif pars.dataset == 'ali':
-        field_size = 21
+        field_size = 20
         train_dict = data_preprocess.read_data_ali('./data/large/ali_train.csv', './data/large/ali_feature_map',
-                                                   ali_num_feat_dim, feature_dim_start=1, dim=21)
+                                                   ali_num_feat_dim, feature_dim_start=1, dim=20)
         valid_dict = data_preprocess.read_data_ali('./data/large/ali_valid.csv', './data/large/ali_feature_map',
-                                                   ali_num_feat_dim, feature_dim_start=1, dim=21)
+                                                   ali_num_feat_dim, feature_dim_start=1, dim=20)
         test_dict = data_preprocess.read_data_ali('./data/large/ali_test.csv', './data/large/ali_feature_map',
-                                                  ali_num_feat_dim, feature_dim_start=1, dim=21)
+                                                  ali_num_feat_dim, feature_dim_start=1, dim=20)
+
 
     else:  # criteo dataset
         field_size = 39

@@ -90,26 +90,20 @@ first_column = final_df.pop('clk')
 final_df.insert(0, 'clk', first_column)
 
 # = categorical features
-sparse_features = ['userid', 'adgroup_id', 'final_gender_code', 'cate_id']
+# sparse_features = ['userid', 'adgroup_id', 'final_gender_code', 'cate_id']
 
 # = numerical features
-dense_features = ['price']
+dense_features = ['price', 'time_stamp']
 
-sequence_features = ['hist_cate_id', 'hist_adgroup_id']
-
-behavior_feature_list = [feat for feat in final_df.columns if feat in ['adgroup_id', 'cate_id']]
-
-final_df[sparse_features] = final_df[sparse_features].fillna('-1', )
-final_df[sequence_features] = final_df[sequence_features].fillna('-1', )
 final_df[dense_features] = final_df[dense_features].fillna(0, )
 target = ['clk']
 
 mms = MinMaxScaler(feature_range=(0, 1))
 final_df[dense_features] = mms.fit_transform(final_df[dense_features])
 
-for col in sparse_features:
+for col in dense_features:
     tmp = final_df.pop(col)
-    final_df.insert(20, col, tmp)
+    final_df.insert(1, col, tmp)
 
 print(final_df)
 
