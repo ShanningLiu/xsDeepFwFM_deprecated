@@ -32,7 +32,7 @@ def get_parser():
     parser.add_argument('-learning_rate', default=0.001, type=float, help='Learning rate')
     parser.add_argument('-momentum', default=0, type=float, help='Momentum')
     parser.add_argument('-l2', default=3e-7, type=float, help='L2 penalty')
-    parser.add_argument('-dataset', default='criteo', type=str, help='Dataset to use', choices=['criteo', 'tiny-criteo', 'twitter', 'ali'])
+    parser.add_argument('-dataset', default='criteo', type=str, help='Dataset to use', choices=['criteo', 'tiny-criteo', 'twitter', 'ali', 'avazu'])
     parser.add_argument('-save_model_path', default=0, type=str, help='Saved model path')
     parser.add_argument('-dynamic_quantization', default=0, type=int, help='Apply dynamic network quantization')
     parser.add_argument('-static_quantization', default=0, type=int, help='Apply static network quantization')

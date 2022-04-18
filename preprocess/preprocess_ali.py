@@ -1,10 +1,10 @@
+from sklearn.utils import shuffle
 import pandas as pd
 import warnings
 
 from sklearn.preprocessing import MinMaxScaler
 
 warnings.simplefilter('ignore')
-
 
 def mem_usage(pandas_obj):
     if isinstance(pandas_obj, pd.DataFrame):
@@ -102,9 +102,59 @@ for col in dense_features:
     tmp = final_df.pop(col)
     final_df.insert(1, col, tmp)
 
-
 final_df.pop('nonclk')
 
-print(final_df)
+# read raw dataset
+ali_click = final_df
+ali_click = shuffle(ali_click)
 
-final_df.to_csv('ali_click.csv', header=None, index=None)
+
+def cnt_freq_train(inputs):
+    count_freq = []
+    for col in inputs:
+        count_freq.append(inputs[col].value_counts())
+
+    return count_freq
+
+
+def generate_feature_map_and_train_csv(inputs, freq_dict, file_feature_map):
+    feature_map = []
+    for freq in freq_dict:
+        col_map = {}
+        for idx, (key, value) in enumerate(freq.items()):
+            col_map[key] = idx + 1
+
+        feature_map.append(col_map)
+    for i, col_map in enumerate(feature_map[2 + 1:]):
+        inputs[inputs.columns[i + 2 + 1]] = inputs[inputs.columns[i + 2 + 1]].map(col_map)
+
+    # write feature_map file
+    f_map = open(file_feature_map, 'w')
+    for i in range(3, 20):
+        for feature in feature_map[i]:
+            if feature_map[i][feature] != 0:
+                f_map.write(str(i) + ',' + str(feature) + ',' + str(feature_map[i][feature]) + '\n')
+    return feature_map
+
+
+def generate_valid_csv(inputs, feature_map):
+    for i, col_map in enumerate(feature_map[2 + 1:]):
+        inputs[inputs.columns[i +2 + 1]] = inputs[inputs.columns[i +2 + 1]].map(col_map)
+
+
+#
+# # Not the best way, follow xdeepfm
+print('Count the frequency.')
+ali_click.fillna(0, inplace=True)
+freq_dict = cnt_freq_train(ali_click)
+
+#
+print('Generate the feature map and impute the training dataset.')
+feature_map = generate_feature_map_and_train_csv(ali_click, freq_dict, 'ali_feature_map')
+
+
+# shuffle data
+ali_click = shuffle(ali_click)
+
+# storage to csv
+ali_click.to_csv('ali_full.csv', header=None, index=None)
