@@ -13,9 +13,9 @@ def mem_usage(pandas_obj):
     usage_mb = usage_b / 1024 ** 2 # convert bytes to megabytes
     return "{:03.2f} MB".format(usage_mb)
 
-raw_sample_df = pd.read_csv('../../archive/raw_sample.csv')
-ad_feature_df = pd.read_csv('../../archive/ad_feature.csv')
-user_profile_df=pd.read_csv('../../archive/user_profile.csv')
+raw_sample_df = pd.read_csv('ali_dataset/raw_sample.csv')
+ad_feature_df = pd.read_csv('ali_dataset/ad_feature.csv')
+user_profile_df=pd.read_csv('ali_dataset/user_profile.csv')
 
 test_size_mb = raw_sample_df.memory_usage().sum() / 1024 / 1024
 test_size_mb1 = ad_feature_df.memory_usage().sum() / 1024 / 1024
@@ -104,6 +104,9 @@ final_df[dense_features] = mms.fit_transform(final_df[dense_features])
 for col in dense_features:
     tmp = final_df.pop(col)
     final_df.insert(1, col, tmp)
+
+final_df.pop('pid')
+final_df.pop('nonclk')
 
 print(final_df)
 

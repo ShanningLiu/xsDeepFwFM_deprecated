@@ -313,6 +313,24 @@ class DeepFMs(torch.nn.Module):
                     if self.embedding_bag:
                         fm_2nd_emb_arr = [(emb(Tzero).t() * Xv[:, i]).t() if i < self.num else emb(Xi[:, i - self.num, :].contiguous()) for i, emb in enumerate(self.fm_2nd_embeddings)]
                     else:
+                        # for i, emb in enumerate(self.fm_2nd_embeddings):
+                        #     print(i, emb)
+                        #     for t in Xi.min(axis=1):
+                        #         print(t)
+                        #     for t in Xi.max(axis=1):
+                        #         print(t)
+
+                        #     for j in range(2048):
+                        #         for k in range(17):
+                        #             print(j, k, Xi[j, k, :])
+
+                        #     if i < self.num:
+                        #         tmp = (torch.sum(emb(Tzero), 1).t() * Xv[:, i]).t()
+                        #     else:
+                        #         print(Xi[:, i - self.num, :].shape)
+                        #         print(Xi[:, i - self.num, :])
+
+                        #         tmp = torch.sum(emb(Xi[:, i - self.num, :].contiguous()), 1)
                         fm_2nd_emb_arr = [(torch.sum(emb(Tzero), 1).t() * Xv[:, i]).t() if i < self.num else torch.sum(
                             emb(Xi[:, i - self.num, :].contiguous()), 1) for i, emb in enumerate(self.fm_2nd_embeddings)]
                     # convert a list of tensors to tensor
