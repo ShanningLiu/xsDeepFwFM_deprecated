@@ -24,7 +24,7 @@ class Dataset(torch.utils.data.Dataset):
 def get_dataset(pars):
     criteo_num_feat_dim = set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
     twitter_num_feat_dim = set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
-    ali_num_feat_dim = set([1, 2])
+    ali_num_feat_dim = set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
     avazu_num_feat_dim = set([1])
 
     if pars.dataset == 'tiny-criteo':
@@ -54,13 +54,13 @@ def get_dataset(pars):
                                                       twitter_category=pars.twitter_category)
 
     elif pars.dataset == 'ali':
-        field_size = 19
+        field_size = 32
         train_dict = data_preprocess.read_data_ali('./data/large/ali_train.csv', './data/large/ali_feature_map',
-                                                   ali_num_feat_dim, feature_dim_start=1, dim=19)
+                                                   ali_num_feat_dim, feature_dim_start=1, dim=32)
         valid_dict = data_preprocess.read_data_ali('./data/large/ali_valid.csv', './data/large/ali_feature_map',
-                                                   ali_num_feat_dim, feature_dim_start=1, dim=19)
+                                                   ali_num_feat_dim, feature_dim_start=1, dim=32)
         test_dict = data_preprocess.read_data_ali('./data/large/ali_test.csv', './data/large/ali_feature_map',
-                                                  ali_num_feat_dim, feature_dim_start=1, dim=19)
+                                                  ali_num_feat_dim, feature_dim_start=1, dim=32)
 
     elif pars.dataset == 'avazu':
         field_size = 23
