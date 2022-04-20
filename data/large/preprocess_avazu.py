@@ -15,7 +15,7 @@ from sklearn.utils import shuffle
 # print(ali_click.head())
 # ali_click.to_csv('avazu_full.csv', header=None, index=None)
 # ali_click = shuffle(ali_click)
-ali_click = pd.read_csv('avazu_full.csv', sep=',', header=None, low_memory=False)
+ali_click = pd.read_csv('/Users/liushanning/PycharmProjects/xsDeepFwFM_deprecated/preprocess/avazu_train.csv', sep=',', header=None, low_memory=False)
 
 def cnt_freq_train(inputs):
     count_freq = []
@@ -33,12 +33,12 @@ def generate_feature_map_and_train_csv(inputs, freq_dict, file_feature_map):
             col_map[key] = idx + 1
 
         feature_map.append(col_map)
-    for i, col_map in enumerate(feature_map[1:]):
-        inputs[inputs.columns[i + 1]] = inputs[inputs.columns[i + 1]].map(col_map)
+    for i, col_map in enumerate(feature_map[1 + 1:]):
+        inputs[inputs.columns[i + 1 + 1]] = inputs[inputs.columns[i + 1 + 1]].map(col_map)
 
     # write feature_map file
     f_map = open(file_feature_map, 'w')
-    for i in range(1, 24):
+    for i in range(2, 24):
         for feature in feature_map[i]:
             if feature_map[i][feature] != 0:
                 f_map.write(str(i) + ',' + str(feature) + ',' + str(feature_map[i][feature]) + '\n')
@@ -46,8 +46,8 @@ def generate_feature_map_and_train_csv(inputs, freq_dict, file_feature_map):
 
 
 def generate_valid_csv(inputs, feature_map):
-    for i, col_map in enumerate(feature_map[1:]):
-        inputs[inputs.columns[i +1]] = inputs[inputs.columns[i + 1]].map(col_map)
+    for i, col_map in enumerate(feature_map[1 + 1:]):
+        inputs[inputs.columns[i +1 + 1]] = inputs[inputs.columns[i +1 + 1]].map(col_map)
 
 # no test data with labels online available
 print('Split the orignal dataset into train and valid dataset.')

@@ -25,7 +25,7 @@ def get_dataset(pars):
     criteo_num_feat_dim = set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13])
     twitter_num_feat_dim = set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
     ali_num_feat_dim = set([1, 2])
-    avazu_num_feat_dim = set([])
+    avazu_num_feat_dim = set([1])
 
     if pars.dataset == 'tiny-criteo':
         field_size = 39
