@@ -97,7 +97,7 @@ class DeepFMs(torch.nn.Module):
         self.num_deeps = num_deeps
         self.deep_layers = [deep_nodes] * h_depth
         self.is_deep_dropout = is_deep_dropout
-        self.dropout_deep = dropout_deep
+        self.dropout_deep = [0.5] * (h_depth+1)
         self.n_epochs = n_epochs
         self.batch_size = batch_size
         self.learning_rate = learning_rate

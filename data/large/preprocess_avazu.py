@@ -15,7 +15,7 @@ from sklearn.utils import shuffle
 # print(ali_click.head())
 # ali_click.to_csv('avazu_full.csv', header=None, index=None)
 # ali_click = shuffle(ali_click)
-ali_click = pd.read_csv('/Users/liushanning/PycharmProjects/xsDeepFwFM_deprecated/preprocess/avazu_train.csv', sep=',', header=None, low_memory=False)
+ali_click = pd.read_csv('avazu_full.csv', index_col=None, header=None, low_memory=False)
 
 def cnt_freq_train(inputs):
     count_freq = []
@@ -54,12 +54,12 @@ print('Split the orignal dataset into train and valid dataset.')
 train_raw = ali_click.sample(frac=0.9, random_state=0, axis=0).reset_index(drop=True)
 test = ali_click[~ali_click.index.isin(train_raw.index)]
 
-valid = train_raw.sample(frac=0.5, random_state=0, axis=0).reset_index(drop=True)
+valid = train_raw.sample(frac=0.2, random_state=0, axis=0).reset_index(drop=True)
 train = train_raw[~train_raw.index.isin(valid.index)].reset_index(drop=True)
 
-train.fillna(0, inplace=True)
-valid.fillna(0, inplace=True)
-test.fillna(0, inplace=True)
+# train.fillna(0, inplace=True)
+# valid.fillna(0, inplace=True)
+# test.fillna(0, inplace=True)
 #
 
 #
@@ -69,22 +69,22 @@ test.fillna(0, inplace=True)
 
 #
 # # Not the best way, follow xdeepfm
-print('Count the frequency.')
-freq_dict = cnt_freq_train(train)
-
+# print('Count the frequency.')
+# freq_dict = cnt_freq_train(train)
 #
-print('Generate the feature map and impute the training dataset.')
-feature_map = generate_feature_map_and_train_csv(train, freq_dict, 'avazu_feature_map')
-
-generate_valid_csv(valid, feature_map)
-generate_valid_csv(test, feature_map)
-
-# fill null with 0
-train.fillna(0, inplace=True)
-valid.fillna(0, inplace=True)
-test.fillna(0, inplace=True)
-
-# shuffle data
+# #
+# print('Generate the feature map and impute the training dataset.')
+# feature_map = generate_feature_map_and_train_csv(train, freq_dict, 'avazu_feature_map')
+#
+# generate_valid_csv(valid, feature_map)
+# generate_valid_csv(test, feature_map)
+#
+# # fill null with 0
+# train.fillna(0, inplace=True)
+# valid.fillna(0, inplace=True)
+# test.fillna(0, inplace=True)
+#
+# # shuffle data
 train = shuffle(train)
 valid = shuffle(valid)
 test = shuffle(test)

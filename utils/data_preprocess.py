@@ -85,6 +85,8 @@ def read_data_ali(file_path, emb_file, num_list, feature_dim_start=1, dim=20):
     f = open(file_path, 'r')
     for line_idx, line in enumerate(f):
         datas = line.strip().split(',')
+        if datas[0] == 'y2':
+            continue
         result['label'].append(int(datas[0]))
 
         indexs = [int(float(item)) for i, item in enumerate(datas) if i not in num_list and i != 0]
